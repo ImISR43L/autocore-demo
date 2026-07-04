@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>web</title>
+
+    <script src="/RDKit_minimal.js"></script>
+
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("autocore_prefs");
+          var prefs = stored ? JSON.parse(stored) : null;
+
+          var theme = prefs && prefs.theme ? prefs.theme : "dark";
+          var colorblindMode =
+            prefs && prefs.colorblindMode ? prefs.colorblindMode : "none";
+          var fontSize = prefs && prefs.fontSize ? prefs.fontSize : "base";
+          var fontFamily =
+            prefs && prefs.fontFamily ? prefs.fontFamily : "standard"; // <--- ADIÇÃO
+
+          var root = document.documentElement;
+          if (theme === "dark") root.classList.add("dark");
+          if (colorblindMode !== "none")
+            root.setAttribute("data-colorblind", colorblindMode);
+          root.setAttribute("data-fontsize", fontSize);
+          root.setAttribute("data-font", fontFamily); // <--- ADIÇÃO
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
