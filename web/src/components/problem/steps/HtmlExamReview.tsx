@@ -1,7 +1,6 @@
 import { useFormContext } from "react-hook-form";
 import {
   Calendar,
-  Clock,
   AlertTriangle,
   Globe,
   CheckCircle,
@@ -30,7 +29,6 @@ export function HtmlExamReview() {
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-      {/* Cabeçalho */}
       <div className="border-b border-border pb-4">
         <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
           <CheckCircle className="text-emerald-500" size={20} />
@@ -41,7 +39,6 @@ export function HtmlExamReview() {
         </p>
       </div>
 
-      {/* Resumo geral */}
       <div className="bg-surface border border-border rounded-xl p-5">
         <h4 className="text-xs font-bold text-muted uppercase tracking-wider mb-4 border-b border-border pb-2">
           Configurações da Avaliação
@@ -114,7 +111,6 @@ export function HtmlExamReview() {
         </div>
       </div>
 
-      {/* Lista de questões */}
       <div className="flex flex-col gap-3">
         <h4 className="text-xs font-bold text-muted uppercase tracking-wider flex justify-between items-center">
           <span className="flex items-center gap-2">

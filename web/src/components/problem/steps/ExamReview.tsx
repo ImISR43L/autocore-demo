@@ -3,7 +3,7 @@ import {
   Calendar,
   Clock,
   AlertTriangle,
-  FileQuestion, // Agora sendo usado
+  FileQuestion,
   CheckCircle,
   HardDrive,
   RotateCcw,
@@ -15,7 +15,8 @@ type ExamValues = Extract<ProblemFormValues, { type: "EXAM" }>;
 export function ExamReview() {
   const { watch } = useFormContext<ExamValues>();
 
-  const values = watch();
+  // Cast para any evita o erro de propriedade inexistente no schema estrito
+  const values = watch() as any;
   const questions = values.questions || [];
 
   const formatDate = (dateStr?: string) => {
@@ -115,7 +116,6 @@ export function ExamReview() {
       </div>
 
       <div className="flex flex-col gap-3">
-        {/* CORREÇÃO: Usando FileQuestion aqui */}
         <h4 className="text-sm font-bold text-gray-400 uppercase flex justify-between items-center">
           <span className="flex items-center gap-2">
             <FileQuestion size={16} /> Questões ({questions.length})
@@ -130,10 +130,10 @@ export function ExamReview() {
         <div className="flex flex-col gap-2">
           {questions.length === 0 ? (
             <div className="text-center py-8 border border-dashed border-gray-800 rounded bg-gray-900/30 text-gray-500">
-              Nenhuma questão foi adicionada no passo anterior.
+              Nenhuma questão foi added no passo anterior.
             </div>
           ) : (
-            questions.map((q, idx) => (
+            questions.map((q: any, idx: number) => (
               <div
                 key={idx}
                 className="bg-gray-900 border border-gray-800 rounded p-3 flex items-center justify-between group hover:border-gray-700 transition-colors"

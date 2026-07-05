@@ -1,5 +1,5 @@
 import { useFieldArray, useFormContext } from "react-hook-form";
-import { Plus, Trash2, Type, CalendarClock, Settings2 } from "lucide-react"; // Importar CalendarClock
+import { Plus, Trash2, Type, Settings2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Select } from "../../ui/Select";
@@ -30,9 +30,7 @@ export function ExerciseConfig({ basePath = "" }: ExerciseConfigProps) {
   return (
     <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
-        {/* --- Coluna 1: Parâmetros (Ocupa 2/3 no desktop) --- */}
         <div className="lg:col-span-2 flex flex-col gap-5">
-          {/* ... (Código da lista de parâmetros mantém igual) ... */}
           <div className="flex flex-wrap justify-between items-end border-b border-border pb-3 gap-3">
             <div>
               <label className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -114,9 +112,7 @@ export function ExerciseConfig({ basePath = "" }: ExerciseConfigProps) {
           </div>
         </div>
 
-        {/* --- Coluna 2: Configurações Laterais --- */}
         <div className="lg:col-span-1 space-y-6">
-          {/* Card Tipo de Retorno */}
           <Card className="p-6 flex flex-col gap-5">
             <div className="flex items-center gap-3 text-foreground border-b border-border pb-3">
               <div className="p-2 bg-primary/10 rounded-md text-primary">

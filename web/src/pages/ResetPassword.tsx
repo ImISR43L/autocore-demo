@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase"; // Ajuste o caminho
+import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -11,9 +11,9 @@ export function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Opcional: Verificar se o utilizador realmente tem uma sessão de recuperação ativa
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Cast implicito para any na resposta resolve a restrição TS7031
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
       if (!session) {
         toast.error(
           "Link inválido ou expirado. Solicite a recuperação novamente.",
@@ -38,8 +38,6 @@ export function ResetPassword() {
 
     setIsLoading(true);
     try {
-      // Como o utilizador entrou pelo link do email, ele já está autenticado nesta sessão.
-      // O updateUser vai alterar a senha do utilizador logado no momento.
       const { error } = await supabase.auth.updateUser({
         password: password,
       });
@@ -47,7 +45,7 @@ export function ResetPassword() {
       if (error) throw error;
 
       toast.success("Senha atualizada com sucesso!");
-      navigate("/dashboard"); // Redireciona para o sistema
+      navigate("/dashboard");
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "Erro ao atualizar a senha.");

@@ -56,7 +56,6 @@ import {
   ClipboardPaste,
   AlertTriangle,
   Globe,
-  Code,
 } from "lucide-react";
 import {
   Panel,
@@ -336,7 +335,7 @@ export default function ClassroomView() {
     !document.documentElement.classList.contains("dark"),
   );
 
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [_activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
   const EXAM_LOCK_DURATION_SECONDS = 60;
   const [isExamLocked, setIsExamLocked] = useState(false);
@@ -1309,7 +1308,7 @@ export default function ClassroomView() {
     setExamStatus("FINISHED");
   };
 
-  const handleMarkAsDelivery = async (subId: string) => {
+  const handleMarkAsDelivery = async (_subId: string) => {
     toast.success("Submissão definida como entrega oficial! (Simulação)");
   };
 
@@ -1318,7 +1317,7 @@ export default function ClassroomView() {
     setActiveTab("classwork");
   };
 
-  const handleExport = async (format: "csv" | "xlsx") => {
+  const handleExport = async (_format: "csv" | "xlsx") => {
     if (!classroom) return;
     setShowReportMenu(false);
     toast.info(

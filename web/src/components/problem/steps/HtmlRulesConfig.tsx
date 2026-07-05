@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
-import { Select } from "../../ui/Select";
 import { Card } from "../../ui/Card";
 import { cn } from "../../../lib/utils";
 
