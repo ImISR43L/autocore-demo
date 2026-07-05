@@ -7,7 +7,7 @@ const mock = new MockAdapter(api, { delayResponse: 600 });
 // ==========================================
 // CONTROLE DE VERSÃO DO BANCO (Limpeza Automática)
 // ==========================================
-const DB_VERSION = "v5.0.0";
+const DB_VERSION = "v6.0.0";
 
 if (sessionStorage.getItem("db_version") !== DB_VERSION) {
   console.log(
@@ -111,7 +111,7 @@ const generateMockSubmissions = (
         problemId: problem.id,
         isDelivery: false,
       });
-      return; // Avança para o próximo estudante sem passar pela randomização abaixo
+      return;
     }
 
     // -----------------------------------------------------------------
@@ -182,14 +182,14 @@ const generateMockSubmissions = (
 // ==========================================
 
 const seedDatabase = () => {
+  // CORREÇÃO: Resgatamos os dados estruturais do visitante de forma segura,
+  // mas REMOVEMOS a gravação forçada inicial com setStorage("demo_user").
+  // O fluxo agora respeitará o Login.tsx perfeitamente!
   const currentUser = getStorage("demo_user", {
     id: DEMO_USER_ID,
     email: "visitante@demo.com",
     name: "Visitante",
   });
-
-  currentUser.id = DEMO_USER_ID;
-  setStorage("demo_user", currentUser);
 
   let classrooms = getStorage<any[]>("demo_classrooms", []);
 
@@ -292,7 +292,7 @@ const seedDatabase = () => {
         code: "WEB204",
         subject: "HTML",
         owner: {
-          id: "demo-user-id", // Modificado para garantir visão de professor na turma 5
+          id: "demo-user-id",
           email: currentUser.email,
           name: currentUser.name,
         },
@@ -322,7 +322,7 @@ const seedDatabase = () => {
           title: "Calculadora de Bhaskara",
           type: "EXERCISE",
           description:
-            "Escreva um programa que calcule as raízes de uma equação do segundo grau.\n\n**Fórmula:** $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$",
+            "Escreva um programa que calcule as raízes de uma equação do segundo grau.\\n\\n**Fórmula:** $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$",
           allowedLanguages: ["python", "javascript", "cpp", "java"],
           testCases: [
             { input: "1 -5 6", expectedOutput: "3 2", isHidden: false },
@@ -360,7 +360,7 @@ const seedDatabase = () => {
           title: "Ordenação de Vetores",
           type: "EXERCISE",
           description:
-            "Escreva um algorithm para ordenar um vetor de inteiros de forma crescente.\n\n**Exemplo:** [5, 4, 3, 2, 1] -> [1, 2, 3, 4, 5]",
+            "Escreva um algoritmo para ordenar um vetor de inteiros de forma crescente.\\n\\n**Exemplo:** [5, 4, 3, 2, 1] -> [1, 2, 3, 4, 5]",
           allowedLanguages: ["c", "cpp", "java", "python"],
           testCases: [
             {
@@ -381,7 +381,7 @@ const seedDatabase = () => {
           allowedLanguages: ["c", "cpp", "java", "python"],
           testCases: [
             {
-              input: "1 2 3 4 5\n3",
+              input: "1 2 3 4 5\\n3",
               expectedOutput: "Encontrado na posição 2",
               isHidden: false,
             },
@@ -396,7 +396,7 @@ const seedDatabase = () => {
           title: "Grid Layout Moderno",
           type: "EXERCISE",
           description:
-            "Crie uma galeria de imagens responsiva usando CSS Grid.\n\nA galeria deve ter uma classe `.gallery` que distribui itens automaticamente.",
+            "Crie uma galeria de imagens responsiva usando CSS Grid.\\n\\nA galeria deve ter uma classe `.gallery` que distribui itens automaticamente.",
           allowedLanguages: ["html"],
           createdAt: new Date().toISOString(),
         },
@@ -626,30 +626,23 @@ mock.onPost("/announcements").reply((config) => {
   return [201, newAnnouncement];
 });
 
-// ==========================================================
-// ROTA REFATORADA: DETECTA QUEM ACESSA E SEPARA AS VISÕES
-// ==========================================================
 mock.onGet(/\/submissions\/problem\/([a-zA-Z0-9-_]+)$/).reply((config) => {
   const probId = config.url!.split("/").pop()!;
   const allSubs = getStorage<any[]>(`demo_submissions_${probId}`, []);
 
-  // Encontra a qual sala de aula este exercício pertence
   const classrooms = getStorage<any[]>("demo_classrooms", []);
   const targetClassroom = classrooms.find((c) => {
     const probs = getStorage<any[]>(`demo_problems_${c.id}`, []);
     return probs.some((p) => p.id === probId);
   });
 
-  // Resgata o usuário ativo da sessão
   const currentUser = getStorage<any>("demo_user", { id: DEMO_USER_ID });
   const currentUserId = currentUser.id || DEMO_USER_ID;
 
-  // SE FOR O PROFESSOR DA TURMA: Retorna tudo (alunos fantasmas + você) para preencher a tabela
   if (targetClassroom && targetClassroom.owner?.id === currentUserId) {
     return [200, allSubs];
   }
 
-  // SE FOR UM ALUNO: Filtra e entrega APENAS os seus rascunhos limpos (elimina a poluição de terceiros)
   const studentOwnSubs = allSubs.filter((s) => s.user?.id === currentUserId);
   return [200, studentOwnSubs];
 });
@@ -695,11 +688,7 @@ mock
         else error++;
       });
 
-      stats.push({
-        name: p.title,
-        Accepted: accepted,
-        Error: error,
-      });
+      stats.push({ name: p.title, Accepted: accepted, Error: error });
     });
 
     return [200, stats];
@@ -724,5 +713,5 @@ mock.onAny().reply((config) => {
 });
 
 console.log(
-  "🚀 [AutoCore Demo] Submissões Isoladas por Usuário Inicializadas!",
+  "🚀 [AutoCore Demo] Inicialização Corrigida — Fluxo de Login Ativo!",
 );
