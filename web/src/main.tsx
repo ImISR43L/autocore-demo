@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { PreferencesProvider } from "./contexts/PreferencesContext.tsx";
+import "./mocks/setup";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

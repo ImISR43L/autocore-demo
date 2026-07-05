@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -26,7 +25,7 @@ export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ALTERAÇÃO 1: Adicionamos um estado de carregamento inicial para a verificação da sessão
+  // Estado de carregamento inicial para a verificação da sessão
   const [checkingSession, setCheckingSession] = useState(true);
 
   const [showPassword, setShowPassword] = useState(false);
@@ -43,7 +42,7 @@ export default function Login() {
 
   const navigate = useNavigate();
 
-  // Novos Requisitos de segurança de senha
+  // Requisitos de segurança de senha
   const [passwordRequirements, setPasswordRequirements] = useState<
     PasswordRequirement[]
   >([
@@ -63,232 +62,203 @@ export default function Login() {
     { id: 4, label: "Pelo menos um número", regex: /[0-9]/, met: false },
   ]);
 
-  // Atualiza os requisitos em tempo real enquanto digita
+  // Verificação de sessão (Substituindo o Supabase pelo sessionStorage)
   useEffect(() => {
-    if (isRegister) {
-      setPasswordRequirements((reqs) =>
-        reqs.map((req) => ({ ...req, met: req.regex.test(password) })),
-      );
+    const user = sessionStorage.getItem("demo_user");
+    if (user) {
+      navigate("/dashboard");
+    } else {
+      setCheckingSession(false);
     }
-  }, [password, isRegister]);
-
-  // Foco automático ao alternar entre Login e Cadastro
-  useEffect(() => {
-    if (isRegister && nameInputRef.current) {
-      nameInputRef.current.focus();
-    } else if (!isRegister && emailInputRef.current) {
-      emailInputRef.current.focus();
-    }
-  }, [isRegister]);
-
-  // ALTERAÇÃO 2: Verificação robusta de sessão com Supabase ao invés de apenas ler localStorage
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (session) {
-          // Se existe uma sessão válida no Supabase, redireciona
-          navigate("/dashboard", { replace: true });
-        }
-      } catch (error) {
-        console.error("Erro ao verificar sessão:", error);
-      } finally {
-        // Finaliza o loading independentemente do resultado
-        setCheckingSession(false);
-      }
-    };
-
-    checkSession();
   }, [navigate]);
 
-  // Lógica de Autenticação (Login)
-  const handleLogin = async (e: React.FormEvent) => {
+  // Validação em tempo real da senha
+  useEffect(() => {
+    if (!isRegister) return;
+
+    setPasswordRequirements((prevReqs) =>
+      prevReqs.map((req) => ({
+        ...req,
+        met: req.regex.test(password),
+      })),
+    );
+  }, [password, isRegister]);
+
+  const isPasswordValid = passwordRequirements.every((req) => req.met);
+  const doPasswordsMatch = password === confirmPassword && password.length > 0;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data?.session) {
-        toast.success("Login efetuado com sucesso!");
-        navigate("/dashboard");
+    if (isRegister) {
+      if (!isPasswordValid) {
+        toast.error("Por favor, atenda a todos os requisitos de senha.");
+        return;
       }
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao efetuar login.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Lógica de Autenticação (Cadastro)
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (password !== confirmPassword) {
-      return toast.error("As senhas não coincidem.");
-    }
-
-    const allReqsMet = passwordRequirements.every((req) => req.met);
-    if (!allReqsMet) {
-      return toast.error("A senha não atende a todos os requisitos.");
+      if (!doPasswordsMatch) {
+        toast.error("As senhas não coincidem.");
+        return;
+      }
+      if (!name) {
+        toast.error("Por favor, insira o seu nome.");
+        return;
+      }
     }
 
     setLoading(true);
 
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name },
-        },
-      });
+    // Simulação de tempo de rede (mock do backend)
+    setTimeout(() => {
+      // 1. Cria o usuário fantasma na sessão
+      const demoUser = {
+        name: name || (isRegister ? "Novo Usuário" : "Visitante"),
+        email: email,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          name || "Visitante",
+        )}&background=random`,
+      };
 
-      if (error) throw error;
+      sessionStorage.setItem("demo_user", JSON.stringify(demoUser));
 
-      if (data?.session) {
+      if (isRegister) {
         toast.success("Conta criada com sucesso!");
-        navigate("/dashboard");
       } else {
-        toast.success("Verifique seu email para confirmar o cadastro.");
-        setIsRegister(false);
+        toast.success("Login realizado com sucesso!");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao criar conta.");
-    } finally {
+
+      navigate("/dashboard");
       setLoading(false);
-    }
+    }, 800);
   };
 
-  // ALTERAÇÃO 3: Retorna nulo enquanto verifica a sessão para evitar piscada
-  if (checkingSession) {
-    return null;
-  }
+  // Se estiver checando a sessão, não renderiza a tela de login
+  if (checkingSession) return null;
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background font-sans text-foreground p-4 relative overflow-hidden">
-      {/* ... O restante do seu JSX permanece idêntico ... */}
-      {/* Decoração de fundo opcional (brilho suave) */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[100px] -z-10 pointer-events-none" />
-
-      {/* Formulário Centralizado */}
-      <div className="w-full max-w-md bg-surface p-8 sm:p-10 rounded-2xl border border-border shadow-2xl relative z-10">
-        {/* Cabeçalho do Formulário */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center mb-4 border border-primary/20 shadow-sm">
-            <GraduationCap size={32} className="text-primary" />
+    <div className="min-h-screen bg-background flex flex-col justify-center items-center p-4">
+      <div className="w-full max-w-md bg-surface p-8 sm:p-10 rounded-2xl shadow-xl border border-border relative z-10">
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-primary/20 shadow-inner">
+            <GraduationCap size={36} className="text-primary" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 tracking-tight">
-            {isRegister ? "Criar Conta" : "Plataforma Autocore"}
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
+            AutoCore
           </h1>
-          <p className="text-muted text-sm">
+          <p className="text-muted text-sm mt-2 text-center">
             {isRegister
-              ? "Preencha os dados abaixo para começar."
-              : "Faça login para continuar seus estudos."}
+              ? "Junte-se à plataforma de correção automatizada."
+              : "Bem-vindo de volta! Acesse sua conta."}
           </p>
         </div>
 
-        <form
-          onSubmit={isRegister ? handleRegister : handleLogin}
-          className="space-y-5"
-        >
-          {/* Nome (Apenas Cadastro) */}
-          {isRegister && (
-            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <label className="input-label">Nome Completo</label>
-              <input
-                ref={nameInputRef}
-                type="text"
-                required
-                className="modern-input"
-                placeholder="João da Silva"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Nome (Exibido no Cadastro, ou opcional no Login para fins da Demo) */}
+          {(isRegister || !isRegister) && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5 ml-1">
+                {isRegister ? "Nome" : "Nome (Opcional na Demo)"}
+              </label>
+              <div className="relative">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  required={isRegister}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full h-11 bg-background border border-border rounded-md px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted/50"
+                  placeholder={
+                    isRegister ? "Seu nome" : "Como quer ser chamado?"
+                  }
+                />
+              </div>
             </div>
           )}
 
-          {/* Email */}
           <div>
-            <label className="input-label">E-mail</label>
-            <input
-              ref={emailInputRef}
-              type="email"
-              required
-              className="modern-input"
-              placeholder="aluno@instituicao.edu.br"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <label className="block text-sm font-medium text-foreground mb-1.5 ml-1">
+              Email
+            </label>
+            <div className="relative">
+              <input
+                ref={emailInputRef}
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full h-11 bg-background border border-border rounded-md px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted/50"
+                placeholder="seu@email.com"
+              />
+            </div>
           </div>
 
-          {/* Senha */}
           <div>
-            <label className="input-label">Senha</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5 ml-1">
+              Senha
+            </label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 required
-                className="modern-input pr-10"
-                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="w-full h-11 bg-background border border-border rounded-md pl-4 pr-12 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted/50"
+                placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors focus:outline-none"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors focus:outline-none bg-transparent border-none"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
 
-          {/* Requisitos de Senha (Apenas Cadastro) */}
-          {isRegister && password.length > 0 && (
-            <div className="bg-background border border-border rounded-lg p-3 space-y-1.5 animate-in fade-in">
-              <p className="text-xs font-semibold text-foreground mb-2">
-                Requisitos da senha:
-              </p>
-              {passwordRequirements.map((req) => (
-                <div key={req.id} className="flex items-center gap-2 text-xs">
-                  {req.met ? (
-                    <Check size={14} className="text-primary" />
-                  ) : (
-                    <X size={14} className="text-muted" />
-                  )}
-                  <span className={req.met ? "text-primary" : "text-muted"}>
-                    {req.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Confirmar Senha (Apenas Cadastro) */}
           {isRegister && (
-            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <label className="input-label">Confirmar Senha</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                className="modern-input"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-destructive text-xs mt-1.5 flex items-center gap-1">
-                  <AlertCircle size={12} /> As senhas não coincidem
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="bg-background/50 border border-border rounded-md p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">
+                  A senha deve conter:
                 </p>
-              )}
+                {passwordRequirements.map((req) => (
+                  <div
+                    key={req.id}
+                    className={`flex items-center gap-2 text-xs transition-colors duration-300 ${
+                      req.met ? "text-green-500" : "text-muted"
+                    }`}
+                  >
+                    {req.met ? <Check size={14} /> : <X size={14} />}
+                    <span>{req.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5 ml-1">
+                  Confirmar Senha
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`w-full h-11 bg-background border rounded-md pl-4 pr-12 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted/50 ${
+                      confirmPassword.length > 0
+                        ? doPasswordsMatch
+                          ? "border-green-500 focus:border-green-500 focus:ring-green-500/50"
+                          : "border-red-500 focus:border-red-500 focus:ring-red-500/50"
+                        : "border-border"
+                    }`}
+                    placeholder="••••••••"
+                  />
+                </div>
+                {confirmPassword.length > 0 && !doPasswordsMatch && (
+                  <p className="text-red-500 text-xs mt-1.5 ml-1 flex items-center gap-1 animate-in fade-in">
+                    <AlertCircle size={12} /> As senhas não coincidem
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

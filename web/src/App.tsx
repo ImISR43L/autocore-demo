@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "./lib/supabase";
+
+// As importações do Supabase foram removidas para o ambiente de demonstração
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
@@ -11,35 +11,25 @@ import CreateProblem from "./pages/CreateProblem";
 import EditProblem from "./pages/EditProblem";
 import { SettingsModal } from "./components/SettingsModal";
 
-// 1. Importe o componente principal da sua nova feature
-// (Ajuste o caminho conforme a estrutura que você definiu)
+// Importe o componente principal da sua nova feature
 import { MoleculeWorkspace } from "./features/molecule-env";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Estado simplificado para verificar a sessão localmente
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    // Substituímos a chamada do Supabase pela verificação no sessionStorage
+    const user = sessionStorage.getItem("demo_user");
+    setIsAuthenticated(!!user);
   }, []);
 
-  if (loading) return null;
+  // Mantemos o mesmo comportamento original de não renderizar nada enquanto carrega
+  if (isAuthenticated === null) return null;
 
-  return session ? <>{children}</> : <Navigate to="/" replace />;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 function App() {
@@ -51,7 +41,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/home" element={<Home />} />
 
-        {/* 2. Adicione a rota de desenvolvimento para as moléculas */}
+        {/* Adicione a rota de desenvolvimento para as moléculas */}
         <Route path="/molecules" element={<MoleculeWorkspace />} />
 
         <Route

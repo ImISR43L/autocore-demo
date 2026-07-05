@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
-import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -80,59 +79,77 @@ export default function Dashboard() {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState("Visitante");
 
+  // ALTERAÇÃO: Lê o usuário do sessionStorage ao invés do Supabase
   useEffect(() => {
     const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        setMyUserId(user.id);
-
-        try {
-          const res = await api.get("/users/me"); // Ajustar para o endpoint real que retorna o User
-          if (res.data?.name) {
-            setUserName(res.data.name.split(" ")[0]);
-            return;
-          }
-        } catch (e) {}
-
-        const metaName =
-          user.user_metadata?.full_name || user.user_metadata?.name;
-        if (metaName && metaName.trim() !== "") {
-          setUserName(metaName.split(" ")[0]);
-        } else if (user.email) {
-          setUserName(user.email.split("@")[0]);
-        } else {
-          setUserName("Visitante");
-        }
+      const savedUser = sessionStorage.getItem("demo_user");
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        // ID fixo para a demonstração agir como dono das turmas
+        setMyUserId("demo-user-id");
+        setUserName(parsedUser.name.split(" ")[0]);
+      } else {
+        navigate("/");
       }
     };
     getUser();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     fetchClassrooms();
   }, [viewMode]);
 
+  // ALTERAÇÃO: Chama a API, mas possui um Fallback robusto para injetar os dados fantasmas
   const fetchClassrooms = async () => {
     try {
-      // Validação delegada ao estado assíncrono do Supabase
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        navigate("/");
-        return;
-      }
+      setLoading(true);
       const endpoint =
         viewMode === "active" ? "/classrooms" : "/classrooms/archived";
       const res = await api.get(endpoint);
       setClassrooms(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
-      console.error(error);
-      toast.error("Sessão expirada. Faça login novamente.");
-      await supabase.auth.signOut();
+      // Fallback para a Demonstração
+      const demoData: Classroom[] =
+        viewMode === "active"
+          ? [
+              {
+                id: "1", // Turma 1 - VOCÊ É O PROFESSOR
+                name: "Lógica de Programação",
+                code: "LOG2024",
+                subject: "PROGRAMMING",
+                owner: { id: "demo-user-id", email: "professor@demo.com" }, // ID igual ao seu
+                problems: [
+                  {
+                    id: "p1",
+                    title: "Calculadora de Bhaskara",
+                    deadline: new Date(Date.now() + 86400000).toISOString(),
+                  },
+                ],
+                _count: { students: 35, problems: 1 },
+              },
+              {
+                id: "2", // Turma 2 - VOCÊ É O ALUNO
+                name: "Química Orgânica",
+                code: "QUI101",
+                subject: "CHEMISTRY",
+                owner: { id: "outro-professor-id", email: "roberto@demo.com" }, // ID diferente do seu
+                problems: [],
+                _count: { students: 42, problems: 0 },
+              },
+            ]
+          : [
+              {
+                id: "3",
+                name: "Desenvolvimento Web (2023)",
+                code: "WEB2023",
+                subject: "HTML",
+                owner: { id: "demo-user-id", email: "professor@demo.com" },
+                problems: [],
+                isArchived: true,
+                _count: { students: 28, problems: 5 },
+              },
+            ];
+      setClassrooms(demoData);
     } finally {
       setLoading(false);
     }
@@ -177,6 +194,7 @@ export default function Dashboard() {
     navigate(`/class/${classId}`, { state: { problemId: problemId } });
   };
 
+  // ALTERAÇÃO: Atualiza o estado local para simular a criação instantânea na demo
   const handleCreateClassroom = async () => {
     if (!newClassName.trim()) {
       toast.error("O nome da turma é obrigatório.");
@@ -184,36 +202,42 @@ export default function Dashboard() {
     }
 
     try {
-      const response = await api.post("/classrooms", {
+      const newClass: Classroom = {
+        id: Math.random().toString(36).substring(7),
         name: newClassName,
+        code: Math.random().toString(36).substring(2, 8).toUpperCase(),
         subject: newClassroomSubject,
-      });
+        owner: { id: myUserId!, email: "demo@autocore.com" },
+        problems: [],
+        _count: { students: 0, problems: 0 },
+      };
 
-      setClassrooms([response.data, ...classrooms]);
+      setClassrooms([newClass, ...classrooms]);
       setShowCreateModal(false);
       setNewClassName("");
       setNewClassroomSubject("PROGRAMMING");
-      toast.success("Turma criada com sucesso!");
+      toast.success("Turma criada na demonstração!");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Erro ao criar turma");
+      toast.error("Erro ao criar turma");
     }
   };
 
+  // ALTERAÇÃO: Simula o join em uma turma
   const handleJoinClassroom = async () => {
     if (!joinCode.trim()) return toast.warning("Código inválido");
     try {
-      await api.post("/classrooms/join", { code: joinCode });
-      toast.success("Você entrou na turma!");
+      toast.success("Você entrou na turma (Modo Demonstração)!");
       setShowJoinModal(false);
       setJoinCode("");
-      fetchClassrooms();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Erro ao entrar");
+      toast.error("Erro ao entrar");
     }
   };
 
+  // ALTERAÇÃO: Limpa o sessionStorage ao sair
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    sessionStorage.removeItem("demo_user");
+    navigate("/");
   };
 
   const filteredClassrooms = classrooms.filter(
@@ -222,12 +246,12 @@ export default function Dashboard() {
       c.code.toLowerCase().includes(search.toLowerCase()),
   );
 
+  // ALTERAÇÕES: Simulam as ações removendo o item do estado visual
   const handleArchive = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      await api.patch(`/classrooms/${id}/archive`);
+      setClassrooms(classrooms.filter((c) => c.id !== id));
       toast.success("Turma arquivada com sucesso!");
-      fetchClassrooms();
     } catch (error) {
       toast.error("Erro ao arquivar turma");
     }
@@ -236,9 +260,8 @@ export default function Dashboard() {
   const handleRestore = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      await api.patch(`/classrooms/${id}/restore`);
+      setClassrooms(classrooms.filter((c) => c.id !== id));
       toast.success("Turma restaurada!");
-      fetchClassrooms();
     } catch (error) {
       toast.error("Erro ao restaurar turma");
     }
@@ -253,9 +276,8 @@ export default function Dashboard() {
     )
       return;
     try {
-      await api.delete(`/classrooms/${id}`);
+      setClassrooms(classrooms.filter((c) => c.id !== id));
       toast.success("Turma excluída permanentemente.");
-      fetchClassrooms();
     } catch (error) {
       toast.error("Erro ao excluir turma.");
     }

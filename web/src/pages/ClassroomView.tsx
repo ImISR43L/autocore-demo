@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { api } from "../lib/api";
-import { supabase } from "../lib/supabase";
 import Editor from "@monaco-editor/react";
 import type { OnMount } from "@monaco-editor/react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
@@ -65,7 +64,6 @@ import {
 } from "react-resizable-panels";
 const PanelGroup = PanelGroupOriginal as any;
 
-import { io } from "socket.io-client";
 import LogViewer from "../components/LogViewer";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { useMonacoTheme } from "../hooks/useMonacoTheme";
@@ -241,7 +239,6 @@ const getLanguageFromExt = (filename: string) => {
 };
 
 export default function ClassroomView() {
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
   const { colorblindMode } = usePreferences();
   const { id } = useParams();
   const navigate = useNavigate();
@@ -362,37 +359,29 @@ export default function ClassroomView() {
   // "Finalizar")? Usado para desligar o travamento de Alt+Tab/tela cheia
   // depois que não há mais nada a proteger.
   const [examFinalized, setExamFinalized] = useState(false);
-  // Espelha `examFinalized` em uma ref para leitura síncrona dentro de
-  // triggerExamLock. Precisamos disso porque handleFinalizeExam chama
-  // exitExamFullscreen() logo após finalizar — o que dispara nosso próprio
-  // listener de "fullscreenchange" — e o estado do React só reflete a
-  // finalização depois de um re-render, que pode não terminar a tempo de
-  // remover o listener antes do evento do navegador chegar. Atualizamos
-  // esta ref de forma síncrona dentro de handleFinalizeExam (e também aqui,
-  // para o caso de examFinalized vir true via hidratação/backend).
   const examFinalizedRef = useRef(false);
+
   useEffect(() => {
     examFinalizedRef.current = examFinalized;
   }, [examFinalized]);
+
   useEffect(() => {
     setExamAcknowledged(false);
   }, [selectedProblemId]);
 
   // Dicionário de arquivos por questão (chave = child problem ID)
-  // Substitui o estado `files` para provas com múltiplas questões
   const [examFilesMap, setExamFilesMap] = useState<Record<string, FileEntry[]>>(
     {},
   );
 
   // Dicionário de HTML por questão (chave = child problem ID)
-  // Substitui o estado `htmlCode` para provas de HTML com múltiplas questões,
-  // evitando que o código do aluno seja perdido ao trocar de questão.
   const [examHtmlMap, setExamHtmlMap] = useState<Record<string, string>>({});
 
   // Questões já entregues (travadas) — Set de child problem IDs
   const [deliveredQuestions, setDeliveredQuestions] = useState<Set<string>>(
     new Set(),
   );
+
   // Resetar ao trocar de prova
   useEffect(() => {
     setDeliveredQuestions(new Set());
@@ -428,7 +417,6 @@ export default function ClassroomView() {
     // Define temas customizados baseados no modo de daltonismo
     const monaco = monacoRef.current;
 
-    // Deuteranopia (Ênfase em Azul/Amarelo)
     monaco.editor.defineTheme("deuteranopia-dark", {
       base: "vs-dark",
       inherit: true,
@@ -443,7 +431,6 @@ export default function ClassroomView() {
       },
     });
 
-    // Tritanopia (Ênfase em Ciano/Rosa)
     monaco.editor.defineTheme("tritanopia-dark", {
       base: "vs-dark",
       inherit: true,
@@ -457,23 +444,18 @@ export default function ClassroomView() {
       },
     });
 
-    // Achromatopsia (Alto Contraste P/B)
     monaco.editor.defineTheme("achromatopsia-dark", {
-      base: "hc-black", // Usa base High Contrast do próprio Monaco
+      base: "hc-black",
       inherit: true,
-      rules: [
-        // Reforça contraste se necessário
-      ],
+      rules: [],
       colors: {
         "editor.selectionBackground": "#ffffff40",
       },
     });
 
-    // Seleciona o tema correto
     let themeToSet = highContrast ? "hc-black" : isLightMode ? "vs" : "vs-dark";
 
     if (!isLightMode) {
-      // Apenas personaliza no modo escuro por enquanto
       if (colorblindMode === "deuteranopia") themeToSet = "deuteranopia-dark";
       if (colorblindMode === "tritanopia") themeToSet = "tritanopia-dark";
       if (colorblindMode === "achromatopsia") themeToSet = "achromatopsia-dark";
@@ -498,17 +480,18 @@ export default function ClassroomView() {
     }
   }, [selectedProblemId, id]);
 
+  // ALTERAÇÃO DEMO: Buscar usuário da sessão
   useEffect(() => {
     const fetchUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user?.id) {
-        setMyUserId(session.user.id);
+      const savedUser = sessionStorage.getItem("demo_user");
+      if (savedUser) {
+        setMyUserId("demo-user-id"); // Hardcoded ID para manter a lógica original funcionando
+      } else {
+        navigate("/");
       }
     };
     fetchUser();
-  }, []);
+  }, [navigate]);
 
   const isOwner = classroom?.owner?.id === myUserId;
   const hasTeacher = !!classroom?.owner;
@@ -524,14 +507,13 @@ export default function ClassroomView() {
       !displayProblem.allowedLanguages ||
       displayProblem.allowedLanguages.length === 0
     ) {
-      return LANGUAGES; // Fallback para atividades antigas
+      return LANGUAGES;
     }
     return LANGUAGES.filter((l) =>
       displayProblem.allowedLanguages!.includes(LANGUAGE_MAP[l.id]),
     );
   }, [displayProblem]);
 
-  // Força a seleção de uma linguagem permitida ao trocar de atividade
   useEffect(() => {
     if (
       !displayProblem ||
@@ -572,7 +554,6 @@ export default function ClassroomView() {
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
-      // Forma correta de limpar o state no React Router sem quebrar o histórico:
       navigate(location.pathname, { replace: true, state: {} });
     } else if (
       location.state &&
@@ -676,20 +657,15 @@ export default function ClassroomView() {
     monacoRef.current.editor.setModelMarkers(model, "owner", markers);
   }, []);
 
-  // 1. Deriva os arquivos base dependendo se é Exercício ou Prova
-  // Derivação Dinâmica baseada nos arquivos base (starterCode)
   const availableLanguages = useMemo(() => {
-    // 1. Extrai o starterCode com base no tipo de atividade
     const files =
       currentProblem?.type === "EXAM"
         ? currentProblem.children?.find((c: any) => c.id === activeTab)
             ?.starterCode
         : currentProblem?.starterCode;
 
-    // 2. Se não houver, fallback vazio
     if (!files || !Array.isArray(files)) return [];
 
-    // 3. Mapeia a extensão do ficheiro para a Linguagem correspondente
     const langs = new Map();
     files.forEach((file: any) => {
       const extension = file.name?.slice(file.name.lastIndexOf("."));
@@ -700,14 +676,11 @@ export default function ClassroomView() {
     return Array.from(langs.values());
   }, [currentProblem, activeTab]);
 
-  // Sincronização do estado selecionado (garante que não seleciona linguagem fantasma)
-  // Sincronização do estado selecionado (garante que não seleciona linguagem fantasma)
   useEffect(() => {
     if (
       availableLanguages.length > 0 &&
       !availableLanguages.find((l) => l.id === languageId)
     ) {
-      // Define a primeira linguagem disponível, passando apenas o ID
       setLanguageId(availableLanguages[0].id);
     }
   }, [availableLanguages, languageId]);
@@ -748,15 +721,85 @@ export default function ClassroomView() {
     }
   }, [classroom, location.state, id, selectedProblemId]);
 
+  // ALTERAÇÃO DEMO: FetchClassroomData simulado/resiliente
   const fetchClassroomData = useCallback(async () => {
     try {
       const res = await api.get(`/classrooms/${id}`);
       setClassroom(res.data);
     } catch {
-      toast.error("Erro ao carregar turma.");
-      navigate("/dashboard");
+      // Verifica se a sala acessada é a sala em que você é aluno (Turma 2)
+      const isStudentView = id === "2";
+
+      const demoAnns = JSON.parse(
+        sessionStorage.getItem(`demo_announcements_${id}`) || "[]",
+      );
+
+      const demoClassroom: Classroom = {
+        id: Number(id) || 1,
+        // Altera o nome e a matéria dependendo se você é aluno ou professor
+        name: isStudentView
+          ? "Química Orgânica (Visão de Aluno)"
+          : "Lógica de Programação (Visão Professor)",
+        code: isStudentView ? "QUI101" : "DEMO01",
+        subject: isStudentView ? "CHEMISTRY" : "PROGRAMMING",
+
+        // A MÁGICA ACONTECE AQUI:
+        owner: {
+          id: isStudentView ? "outro-professor-id" : "demo-user-id",
+          email: isStudentView ? "roberto@demo.com" : "professor@demo.com",
+          name: isStudentView ? "Prof. Roberto" : "Professor Demo",
+        },
+
+        students: [
+          // Se você for aluno, o seu usuário é injetado na lista de estudantes
+          ...(isStudentView
+            ? [
+                {
+                  id: "demo-user-id",
+                  email: "eu@demo.com",
+                  name: "Meu Usuário",
+                },
+              ]
+            : []),
+          { id: "s1", email: "aluno1@escola.com", name: "Ana Silva" },
+          { id: "s2", email: "aluno2@escola.com", name: "Carlos Souza" },
+        ],
+        problems: [
+          {
+            id: "prob-1",
+            title: isStudentView
+              ? "Nomenclatura IUPAC"
+              : "Calculadora de Bhaskara",
+            slug: "demo-exercise",
+            type: "EXERCISE",
+            description: isStudentView
+              ? "Monte a estrutura da molécula com base nas regras da IUPAC."
+              : "Escreva um programa que calcule as raízes de uma equação do segundo grau.\n\n**Fórmula:** $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$",
+            testCases: [
+              { input: "1 -5 6", expectedOutput: "3 2", isHidden: false },
+            ],
+            allowedLanguages: ["python", "javascript", "cpp", "java"],
+          },
+        ],
+        announcements:
+          demoAnns.length > 0
+            ? demoAnns
+            : [
+                {
+                  id: "ann-welcome",
+                  content: "Bem-vindos à turma de demonstração do AutoCore!",
+                  createdAt: new Date().toISOString(),
+                  author: {
+                    id: isStudentView ? "outro-professor-id" : "demo-user-id",
+                    email: "professor@demo.com",
+                    name: isStudentView ? "Prof. Roberto" : "Sistema AutoCore",
+                  },
+                },
+              ],
+      };
+      setClassroom(demoClassroom);
     }
-  }, [id, navigate]);
+  }, [id]);
 
   const fetchSubmissions = useCallback(async (probId: string) => {
     if (!probId) return;
@@ -764,7 +807,7 @@ export default function ClassroomView() {
       const res = await api.get(`/submissions/problem/${probId}`);
       setSubmissions(res.data);
     } catch (error) {
-      console.error(error);
+      setSubmissions([]);
     }
   }, []);
 
@@ -773,7 +816,10 @@ export default function ClassroomView() {
       const res = await api.get(`/submissions/stats/problem/${probId}`);
       setProblemStats(res.data);
     } catch {
-      console.error("Erro problem stats");
+      setProblemStats([
+        { name: "Acertos", value: 8, fill: "#10b981" },
+        { name: "Erros", value: 3, fill: "#ef4444" },
+      ]);
     }
   }, []);
 
@@ -782,7 +828,7 @@ export default function ClassroomView() {
       const res = await api.get(`/submissions/stats/classroom/${id}`);
       setStats(res.data);
     } catch {
-      console.error("Erro stats");
+      setStats([{ name: "Geral", Accepted: 45, Error: 12 }]);
     }
   }, [id]);
 
@@ -801,100 +847,8 @@ export default function ClassroomView() {
 
   useEffect(() => {
     fetchClassroomData();
-    const interval = setInterval(fetchClassroomData, 10000);
-    return () => clearInterval(interval);
+    // Socket removido na versão demo
   }, [fetchClassroomData]);
-
-  useEffect(() => {
-    if (!myUserId || !id) return;
-
-    let newSocket: any;
-
-    const connectSocket = async () => {
-      // 1. Recupera a sessão atual para capturar o JWT Token
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      // 2. Injeta o token na propriedade 'auth' no handshake do WebSocket
-      newSocket = io(API_URL, {
-        transports: ["websocket"],
-        auth: {
-          token: session?.access_token,
-        },
-      });
-
-      newSocket.on("connect", () => {
-        console.log("Conectado ao WebSocket!");
-        // O servidor agora valida a identidade via token e ignora as requisições puras do cliente
-        // para mitigação do IDOR, mas os eventos permanecem como inicializadores da conexão.
-        newSocket.emit("join-user-room", { userId: myUserId });
-        newSocket.emit("join-classroom-room", { classroomId: Number(id) });
-      });
-
-      newSocket.on("submission-finished", (submission: Submission) => {
-        const currentProb = displayProblemRef.current;
-        if (
-          currentProb &&
-          ((submission.problem?.id &&
-            submission.problem.id === currentProb.id) ||
-            submission.problemId === currentProb.id)
-        ) {
-          setVerdict(submission.status);
-          setLoading(false);
-          loadingRef.current = false;
-
-          if (window.innerWidth < 1024 && !isOwnerRef.current) {
-            setMobileIdeTab("console");
-          }
-
-          if (submission.status === "Accepted")
-            toast.success("Solução Aceita! 🚀");
-          else if (submission.status === "Wrong Answer")
-            toast.error("Resposta Incorreta.");
-          else toast.error(`Erro: ${submission.status}`);
-
-          fetchSubmissions(currentProb.id);
-          if (isOwnerRef.current) fetchProblemStats(currentProb.id);
-        }
-        if (isOwnerRef.current) fetchStats();
-      });
-
-      newSocket.on(
-        "classroom-update",
-        (data: { type: string; problemId: string }) => {
-          fetchClassroomData();
-          const currentTab = activeTabRef.current;
-          const currentProb = displayProblemRef.current;
-          const owner = isOwnerRef.current;
-          if (currentTab === "analytics" && owner) {
-            fetchStats();
-          }
-          if (
-            currentTab === "classwork" &&
-            currentProb?.id === data.problemId
-          ) {
-            fetchSubmissions(data.problemId);
-            if (owner) fetchProblemStats(data.problemId);
-          }
-        },
-      );
-    };
-
-    connectSocket();
-
-    return () => {
-      if (newSocket) newSocket.disconnect();
-    };
-  }, [
-    myUserId,
-    id,
-    API_URL,
-    fetchSubmissions,
-    fetchProblemStats,
-    fetchStats,
-    fetchClassroomData,
-  ]);
 
   useEffect(() => {
     if (!selectedProblemId) return;
@@ -904,11 +858,20 @@ export default function ClassroomView() {
         setCurrentProblem(res.data);
         setActiveChildIndex(0);
       } catch (e) {
-        console.error("Erro ao carregar detalhes", e);
+        // Fallback para os detalhes caso API falhe (já mockado no classroom view principal)
+        if (classroom) {
+          const prob = classroom.problems.find(
+            (p) => p.id === selectedProblemId,
+          );
+          if (prob) {
+            setCurrentProblem(prob);
+            setActiveChildIndex(0);
+          }
+        }
       }
     };
     fetchProblemDetails();
-  }, [selectedProblemId]);
+  }, [selectedProblemId, classroom]);
 
   useEffect(() => {
     const lang = LANGUAGES.find((l) => l.id === languageId);
@@ -931,7 +894,6 @@ export default function ClassroomView() {
       }
     }
 
-    // Filtra o starterCode baseando-se na linguagem selecionada
     if (displayProblem.starterCode && displayProblem.starterCode.length > 0) {
       const langFiles = displayProblem.starterCode.filter((f) => {
         const extLang = getLanguageFromExt(f.name);
@@ -963,13 +925,10 @@ export default function ClassroomView() {
   useEffect(() => {
     if (activeTab === "analytics" && isOwner && id) {
       fetchStats();
-      const interval = setInterval(fetchStats, 10000);
-      return () => clearInterval(interval);
     }
   }, [activeTab, isOwner, id, fetchStats]);
 
   useEffect(() => {
-    // Se não for prova, limpa os estados e sai
     if (!currentProblem || currentProblem.type !== "EXAM") {
       setTimeLeft(null);
       setExamStatus("WAITING");
@@ -985,13 +944,10 @@ export default function ClassroomView() {
         ? new Date(currentProblem.deadline).getTime()
         : Infinity;
 
-      // A prova inicia se a data atual passou da startDate OU se o professor clicou em Iniciar manualmente (startedAt)
       const hasStartDate = !!currentProblem.startDate;
       const isStarted =
-        currentProblem.startedAt != null || // professor clicou em Iniciar
-        (hasStartDate && now >= start); // data automática chegou
+        currentProblem.startedAt != null || (hasStartDate && now >= start);
 
-      // Sem deadline = nunca termina
       const hasDeadline = !!currentProblem.deadline;
       const isFinished = hasDeadline && now > end;
 
@@ -1001,7 +957,6 @@ export default function ClassroomView() {
       } else if (isStarted && !isFinished) {
         setExamStatus("RUNNING");
         if (end !== Infinity) {
-          // O tempo restante é a diferença entre o PRAZO FINAL e o MOMENTO ATUAL
           const diff = end - now;
           const h = Math.floor(diff / 36e5)
             .toString()
@@ -1138,8 +1093,6 @@ export default function ClassroomView() {
               if (targetProblemId === String(p.id)) foundIndex = i;
             }
           } catch (e) {
-            console.error(e);
-            // fallback: se o fetch falhar para o problema clicado, usa o que já temos
             if (targetProblemId === String(p.id)) {
               loadedSubs[p.id] = targetSubmission;
               foundIndex = i;
@@ -1166,29 +1119,7 @@ export default function ClassroomView() {
 
   const handleSaveGrade = async () => {
     if (!currentProblem || !inspectingUser) return;
-    const targetProb =
-      currentProblem.children && currentProblem.children.length > 0
-        ? currentProblem.children[activeInspectionIndex]
-        : currentProblem;
-    const sub = studentSubmissions[targetProb.id];
-    if (!sub) return toast.error("Nenhuma submissão para dar nota.");
-    try {
-      await api.patch(`/submissions/${sub.id}/grade`, {
-        grade: gradingGrade === "" ? null : Number(gradingGrade),
-        teacherComment: gradingComment,
-      });
-      toast.success("Nota salva!");
-      setStudentSubmissions((prev) => ({
-        ...prev,
-        [targetProb.id]: {
-          ...sub,
-          grade: Number(gradingGrade),
-          teacherComment: gradingComment,
-        },
-      }));
-    } catch {
-      toast.error("Erro ao salvar nota.");
-    }
+    toast.success("Nota salva com sucesso! (Simulação)");
   };
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
@@ -1202,45 +1133,55 @@ export default function ClassroomView() {
       return;
     setPosting(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("classroomId", id as string);
-
-      formData.append("content", newAnnouncement);
-
-      formData.append("manualLinks", JSON.stringify(manualLinks));
-
-      if (selectedFiles.length > 0) {
-        selectedFiles.forEach((file) => {
-          formData.append("files", file);
-        });
-      }
-
-      await api.post("/announcements", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
+    setTimeout(() => {
+      const demoUser = JSON.parse(sessionStorage.getItem("demo_user") || "{}");
+      const newPost: Announcement = {
+        id: `ann-${Date.now()}`,
+        content: newAnnouncement,
+        createdAt: new Date().toISOString(),
+        author: {
+          id: "demo-user-id",
+          email: demoUser.email || "demo@demo.com",
+          name: demoUser.name || "Professor",
         },
-      });
+        links: manualLinks.map((url) => ({
+          url,
+          title: "Link Adicionado",
+          description: "Preview indisponível na demo",
+          imageUrl: "",
+        })),
+        attachments: selectedFiles.map((f) => ({
+          type: "file",
+          name: f.name,
+          url: "#",
+          size: f.size,
+          mimeType: f.type,
+        })),
+      };
 
-      toast.success("Aviso publicado!");
+      const existing = JSON.parse(
+        sessionStorage.getItem(`demo_announcements_${id}`) || "[]",
+      );
+      sessionStorage.setItem(
+        `demo_announcements_${id}`,
+        JSON.stringify([newPost, ...existing]),
+      );
+
+      toast.success("Aviso publicado na demonstração!");
       setNewAnnouncement("");
       setSelectedFiles([]);
       setManualLinks([]);
       setShowLinkInput(false);
       setCurrentLink("");
       fetchClassroomData();
-    } catch (error) {
-      toast.error("Erro ao publicar aviso.");
-      console.error(error);
-    } finally {
       setPosting(false);
-    }
+    }, 600);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      const validFiles = files.filter((f) => f.size <= 20 * 1024 * 1024); // Máx 20MB
+      const validFiles = files.filter((f) => f.size <= 20 * 1024 * 1024);
       if (validFiles.length < files.length)
         toast.warning("Alguns arquivos excedem o limite de 20MB.");
       setSelectedFiles((prev) => [...prev, ...validFiles]);
@@ -1249,13 +1190,18 @@ export default function ClassroomView() {
 
   const handleDeleteAnnouncement = async (id: string) => {
     if (!confirm("Apagar?")) return;
-    try {
-      await api.delete(`/announcements/${id}`);
-      toast.success("Removido.");
-      fetchClassroomData();
-    } catch {
-      toast.error("Erro.");
-    }
+
+    const existing = JSON.parse(
+      sessionStorage.getItem(`demo_announcements_${classroom?.id}`) || "[]",
+    );
+    const filtered = existing.filter((a: any) => a.id !== id);
+    sessionStorage.setItem(
+      `demo_announcements_${classroom?.id}`,
+      JSON.stringify(filtered),
+    );
+
+    toast.success("Aviso removido!");
+    fetchClassroomData();
   };
 
   const handleAddLink = () => {
@@ -1277,16 +1223,10 @@ export default function ClassroomView() {
 
   const handleDeleteProblem = async () => {
     if (!selectedProblemId || !confirm("Certeza?")) return;
-    try {
-      await api.delete(`/problems/${selectedProblemId}`);
-      toast.success("Eliminado!");
-      setSelectedProblemId(null);
-      fetchClassroomData();
-    } catch {
-      toast.error("Erro.");
-    }
+    toast.info("A exclusão de problemas está desabilitada na demonstração.");
   };
 
+  // ALTERAÇÃO DEMO: submitSolution apenas simula e bloqueia
   const submitSolution = async (e?: React.SyntheticEvent) => {
     if (e) e.preventDefault();
 
@@ -1312,7 +1252,6 @@ export default function ClassroomView() {
       return;
     }
 
-    // 1. Inicia o bloqueio contra múltiplos cliques acidentais simultâneos
     setLoading(true);
     loadingRef.current = true;
     setVerdict("Processando...");
@@ -1322,89 +1261,15 @@ export default function ClassroomView() {
       setMobileIdeTab("console");
     }
 
-    try {
-      let payloadFiles = isExam ? activeQuestionFiles : files;
-      // CORREÇÃO: Garantimos que o ID nunca seja nulo usando 71 como padrão
-      let payloadLanguageId: number | undefined = languageId || 71;
-
-      if (classroom?.subject === "CHEMISTRY") {
-        const studentSmiles = useMoleculeStore
-          .getState()
-          .exportCurrentMolecule("smiles");
-
-        if (!studentSmiles) {
-          toast.error("A tela está vazia! Desenhe a molécula antes de enviar.");
-          setLoading(false);
-          loadingRef.current = false;
-          setVerdict(null);
-          return;
-        }
-
-        payloadFiles = [{ name: "submission.smi", content: studentSmiles }];
-      }
-
-      if (classroom?.subject === "HTML") {
-        if (!activeQuestionHtml.trim()) {
-          toast.error("O editor está vazio! Escreva seu HTML antes de enviar.");
-          setLoading(false);
-          loadingRef.current = false;
-          setVerdict(null);
-          return;
-        }
-        payloadFiles = [{ name: "index.html", content: activeQuestionHtml }];
-        payloadLanguageId = undefined; // HTML não usa language_id
-      }
-
-      // Monta o payload dinâmico
-      const payload: any = {
-        files: payloadFiles,
-        problem_id: displayProblem.id,
-        activityLogs: activityLogs,
-      };
-
-      // Só anexa o language_id se ele existir (ou seja, se for programação)
-      if (payloadLanguageId !== undefined) {
-        payload.language_id = payloadLanguageId;
-      }
-
-      await api.post(`/submissions`, payload);
-      setActivityLogs([]);
-
+    setTimeout(() => {
       setLoading(false);
       loadingRef.current = false;
-      setVerdict("Na Fila...");
-      toast.info("Gabarito enviado! Aguardando o motor químico...");
-
-      setTimeout(() => {
-        if (displayProblemRef.current) {
-          fetchSubmissions(displayProblemRef.current.id);
-        }
-      }, 10000);
-    } catch (error: any) {
-      setLoading(false);
-      loadingRef.current = false;
-      console.error(error);
-
-      const errorMessage =
-        error?.response?.data?.message || "Erro ao enviar submissão.";
-      const displayMessage = Array.isArray(errorMessage)
-        ? errorMessage[0]
-        : errorMessage;
-
-      if (error?.response?.status === 429) {
-        setVerdict("Muitas Tentativas");
-        setSubmissionError("Aguarde um momento antes de enviar novamente.");
-        toast.warning("Aguarde um momento antes de enviar novamente.");
-      } else if (error?.response?.status === 403) {
-        setVerdict("Bloqueado");
-        setSubmissionError(displayMessage);
-        toast.error(displayMessage);
-      } else {
-        setVerdict("Erro");
-        setSubmissionError(displayMessage);
-        toast.error("Erro ao enviar submissão.");
-      }
-    }
+      setVerdict("Bloqueado na Demo");
+      setSubmissionError(
+        "A execução de código requer a arquitetura backend com o Go-Judge. Este é um ambiente de demonstração 100% Frontend. O código não foi avaliado.",
+      );
+      toast.info("Ação bloqueada no modo demonstração.");
+    }, 1500);
   };
 
   useEffect(() => {
@@ -1415,11 +1280,9 @@ export default function ClassroomView() {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // ✅ CORREÇÃO 1: Detecta PASTE via API nativa do Monaco
-    // editor.onDidPaste dispara após o conteúdo ser inserido, com o range exato do texto colado
     editor.onDidPaste((e) => {
       const pastedText = editor.getModel()?.getValueInRange(e.range) ?? "";
-      if (pastedText.length < 15) return; // ignora colagens muito pequenas
+      if (pastedText.length < 15) return;
       setActivityLogs((prev) => [
         ...prev,
         {
@@ -1430,8 +1293,6 @@ export default function ClassroomView() {
       ]);
     });
 
-    // ✅ CORREÇÃO 2: Detecta COPY via listener DOM no nó interno do Monaco
-    // getDomNode() retorna o elemento raiz do editor, onde os eventos do teclado/clipboard realmente vivem
     const domNode = editor.getDomNode();
     if (domNode) {
       domNode.addEventListener("copy", () => {
@@ -1451,7 +1312,6 @@ export default function ClassroomView() {
       });
     }
 
-    // Código existente que já estava aqui
     editor.addAction({
       id: "submit-code-action",
       label: "Enviar Solução",
@@ -1488,20 +1348,10 @@ export default function ClassroomView() {
 
   const handleStartExam = async () => {
     if (!confirm("Iniciar?")) return;
-    try {
-      await api.patch(`/problems/${selectedProblemId}/start`, {});
-      toast.success("Iniciada!");
-      const res = await api.get(`/problems/${selectedProblemId}`);
-      setCurrentProblem(res.data);
-    } catch {
-      toast.error("Erro.");
-    }
+    toast.success("Prova iniciada! (Simulação)");
+    setExamStatus("RUNNING");
   };
 
-  // Encerra manualmente uma prova em andamento. Necessário especialmente
-  // quando a prova não tem `deadline` definido: sem isso, o status nunca
-  // sai de "RUNNING" sozinho, e o professor ficava sem nenhuma forma de
-  // finalizar a prova para a turma.
   const handleEndExam = async () => {
     if (
       !confirm(
@@ -1509,26 +1359,12 @@ export default function ClassroomView() {
       )
     )
       return;
-    try {
-      await api.patch(`/problems/${selectedProblemId}/end`, {});
-      toast.success("Prova encerrada!");
-      const res = await api.get(`/problems/${selectedProblemId}`);
-      setCurrentProblem(res.data);
-    } catch {
-      toast.error("Erro ao encerrar a prova.");
-    }
+    toast.success("Prova encerrada! (Simulação)");
+    setExamStatus("FINISHED");
   };
 
   const handleMarkAsDelivery = async (subId: string) => {
-    try {
-      await api.patch(`/submissions/${subId}/deliver`);
-      toast.success("Submissão definida como entrega oficial!");
-      if (displayProblem) {
-        fetchSubmissions(displayProblem.id);
-      }
-    } catch (error) {
-      toast.error("Erro ao definir entrega.");
-    }
+    toast.success("Submissão definida como entrega oficial! (Simulação)");
   };
 
   const handleGoToProblem = (probId: string) => {
@@ -1539,33 +1375,9 @@ export default function ClassroomView() {
   const handleExport = async (format: "csv" | "xlsx") => {
     if (!classroom) return;
     setShowReportMenu(false);
-    const toastId = toast.loading("Gerando relatório...");
-    try {
-      const response = await api.get(
-        `/reports/classroom/${classroom.id}/${format}`,
-        {
-          responseType: "blob",
-        },
-      );
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      const extension = format === "csv" ? "csv" : "xlsx";
-      link.setAttribute(
-        "download",
-        `Relatorio_Turma_${classroom.code}.${extension}`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success(`Relatório ${format.toUpperCase()} gerado!`, {
-        id: toastId,
-      });
-    } catch (error) {
-      console.error(error);
-      toast.error("Erro ao gerar relatório.", { id: toastId });
-    }
+    toast.info(
+      "A geração de relatórios Excel/CSV requer processamento no backend e está desabilitada na demo.",
+    );
   };
 
   const myAttemptsCount = useMemo(() => {
@@ -1616,17 +1428,8 @@ export default function ClassroomView() {
 
   const [htmlCode, setHtmlCode] = useState<string>("");
 
-  // Estado do editor HTML ao vivo
   const isExam = currentProblem?.type === "EXAM";
 
-  // Hidrata deliveredQuestions/examFinalized a partir do backend ao carregar
-  // uma prova. Sem isso, esses estados viviam só na sessão do navegador: um
-  // F5 (ou simplesmente navegar para outro exercício e voltar) fazia o
-  // aluno "perder" o progresso de entrega no client — mesmo com o servidor
-  // já tendo tudo registrado — reativando a splash de reconhecimento e o
-  // travamento de Alt+Tab numa prova que ele já tinha terminado, o que
-  // também o impedia de ir fazer outros exercícios da disciplina sem medo
-  // de ser travado novamente.
   useEffect(() => {
     if (
       !isExam ||
@@ -1681,7 +1484,6 @@ export default function ClassroomView() {
     };
   }, [isExam, isOwner, myUserId, currentProblem]);
 
-  // --- FUNÇÕES DE TELA CHEIA (PROVAS) ---
   const requestExamFullscreen = useCallback(() => {
     const el = document.documentElement as any;
     const request =
@@ -1693,9 +1495,7 @@ export default function ClassroomView() {
       try {
         const result = request.call(el);
         if (result?.catch) result.catch(() => {});
-      } catch {
-        // Navegador pode recusar se não houver gesto do usuário; ignoramos.
-      }
+      } catch {}
     }
   }, []);
 
@@ -1716,18 +1516,11 @@ export default function ClassroomView() {
       try {
         const result = exit.call(doc);
         if (result?.catch) result.catch(() => {});
-      } catch {
-        // Ignora falha ao sair do modo tela cheia
-      }
+      } catch {}
     }
   }, []);
 
-  // Dispara o bloqueio de 1 minuto e registra a ocorrência no log de atividades
   const triggerExamLock = useCallback((reason: string) => {
-    // Checagem síncrona: se a prova já foi finalizada (mesmo que o efeito
-    // de detecção ainda não tenha sido desmontado por causa do timing do
-    // re-render), não trava a tela. Ver comentário na declaração de
-    // examFinalizedRef para o porquê disso ser necessário.
     if (examFinalizedRef.current) return;
     setActivityLogs((prev) => [
       ...prev,
@@ -1741,32 +1534,16 @@ export default function ClassroomView() {
     setLockCountdown(EXAM_LOCK_DURATION_SECONDS);
   }, []);
 
-  // Contagem regressiva do bloqueio de 1 minuto.
-  // IMPORTANTE: não saímos do bloqueio automaticamente aqui, pois
-  // requestFullscreen() só funciona dentro de um gesto direto do usuário
-  // (clique). Se chamado sozinho num useEffect, o navegador rejeita a
-  // promise silenciosamente e a prova fica fora da tela cheia sem que
-  // nenhum novo evento de "fullscreenchange" seja disparado para
-  // detectar isso. Por isso, ao chegar a 0, apenas paramos o timer e
-  // exibimos um botão para o aluno retomar manualmente (ver handleResumeExam).
-  // Reforço de segurança: além do overlay visual, remove o foco de qualquer
-  // campo/editor e trava a edição enquanto a tela estiver bloqueada — caso
-  // contrário, o teclado ainda poderia enviar eventos (ex: colar) para o
-  // Monaco mesmo com o overlay cobrindo a tela visualmente.
   useEffect(() => {
     if (isExamLocked) {
       (document.activeElement as HTMLElement | null)?.blur?.();
       try {
         editorRef.current?.updateOptions?.({ readOnly: true });
-      } catch {
-        // Editor pode não estar montado ainda; ignora.
-      }
+      } catch {}
     } else if (!isOwner) {
       try {
         editorRef.current?.updateOptions?.({ readOnly: false });
-      } catch {
-        // Ignora
-      }
+      } catch {}
     }
   }, [isExamLocked, isOwner]);
 
@@ -1777,9 +1554,6 @@ export default function ClassroomView() {
     return () => clearTimeout(timer);
   }, [isExamLocked, lockCountdown]);
 
-  // Chamado pelo clique do aluno no botão "Voltar à prova".
-  // Como está dentro de um handler de clique, é um gesto de usuário válido
-  // e o navegador permite requestFullscreen() de forma confiável aqui.
   const handleResumeExam = useCallback(() => {
     requestExamFullscreen();
     setIsExamLocked(false);
@@ -1794,7 +1568,6 @@ export default function ClassroomView() {
     ]);
   }, [requestExamFullscreen]);
 
-  // Detecta tentativas de Alt+Tab, troca de aba ou saída da tela cheia durante a prova
   useEffect(() => {
     const examIsActive =
       isExam &&
@@ -1805,7 +1578,7 @@ export default function ClassroomView() {
     if (!examIsActive) return;
 
     const handleWindowBlur = () => {
-      if (document.hidden) return; // evita log duplicado (visibilitychange já cobre)
+      if (document.hidden) return;
       triggerExamLock("Tentativa de sair da janela (Alt+Tab) detectada.");
     };
 
@@ -1873,13 +1646,6 @@ export default function ClassroomView() {
     (isExam && examStatus === "WAITING" && !isOwner) ||
     (isExam && examStatus === "FINISHED" && !isOwner);
 
-  // Separamos os dois motivos que compunham "isBlocked" porque eles têm
-  // efeitos diferentes: tentativas esgotadas só deveriam impedir um novo
-  // TESTE (que consome tentativa) — não a ENTREGA de uma questão já
-  // testada, que apenas finaliza o que já foi enviado. Sem essa separação,
-  // com maxAttempts = 1, o aluno testava uma vez, "isBlocked" virava true,
-  // e o botão "Entregar Questão" ficava travado junto — impedindo-o de
-  // finalizar a própria questão que acabou de testar.
   const attemptsExhausted = !isOwner && hasLimit && attemptsLeft <= 0;
   const examWindowBlocked =
     (!isOwner && isDeadlinePassed) ||
@@ -1916,17 +1682,13 @@ export default function ClassroomView() {
     } catch (e) {}
   }
 
-  // Separação dos problemas por tipo (logo após dropdownOptions)
   const exerciseOptions = dropdownOptions.filter((p) => p.type !== "EXAM");
   const examOptions = dropdownOptions.filter((p) => {
     if (p.type !== "EXAM") return false;
     if (isOwner) return true;
-    // Aluno só vê a prova se ela já foi iniciada (startedAt existe)
     return !!p.startedAt;
   });
 
-  // Arquivos da questão ativa no modo prova
-  // Em exercícios, continua usando `files`; em provas, usa o mapa
   const activeQuestionFiles: FileEntry[] =
     isExam && displayProblem
       ? (examFilesMap[displayProblem.id] ??
@@ -1935,14 +1697,11 @@ export default function ClassroomView() {
         ])
       : files;
 
-  // HTML da questão ativa no modo prova (mesma lógica do `activeQuestionFiles`)
-  // Em exercícios, continua usando `htmlCode`; em provas, usa o mapa por questão
   const activeQuestionHtml: string =
     isExam && displayProblem
       ? (examHtmlMap[displayProblem.id] ?? "")
       : htmlCode;
 
-  // Atualiza o HTML respeitando se estamos numa prova (mapa) ou exercício avulso
   const setActiveQuestionHtml = (value: string) => {
     if (isExam && displayProblem) {
       setExamHtmlMap((prev) => ({ ...prev, [displayProblem.id]: value }));
@@ -1951,40 +1710,21 @@ export default function ClassroomView() {
     }
   };
 
-  // A questão atual está travada?
   const isCurrentQuestionDelivered =
     isExam && displayProblem
       ? deliveredQuestions.has(displayProblem.id)
       : false;
 
-  // Todas as questões foram entregues?
   const allQuestionsDelivered =
     isExam && currentProblem?.children?.length
       ? currentProblem.children.every((c) => deliveredQuestions.has(c.id))
       : false;
 
-  // Entrega individual de uma questão
   const handleDeliverQuestion = async (childId: string) => {
-    // Busca a última submissão desta questão pelo aluno
-    const sub = submissions.find(
-      (s) => s.user?.id === myUserId && s.problem?.id === childId,
-    );
-    if (!sub) {
-      toast.error(
-        "Envie pelo menos uma solução antes de entregar esta questão.",
-      );
-      return;
-    }
-    try {
-      await api.patch(`/submissions/${sub.id}/deliver`);
-      setDeliveredQuestions((prev) => new Set(prev).add(childId));
-      toast.success("Questão entregue e travada!");
-    } catch {
-      toast.error("Erro ao entregar questão.");
-    }
+    setDeliveredQuestions((prev) => new Set(prev).add(childId));
+    toast.success("Questão entregue e travada! (Simulação)");
   };
 
-  // Entrega final da prova (empacota tudo)
   const handleFinalizeExam = async () => {
     if (!currentProblem?.children) return;
     const undelivered = currentProblem.children.filter(
@@ -1996,17 +1736,11 @@ export default function ClassroomView() {
       );
       return;
     }
-    toast.success("Prova finalizada! Todas as questões foram entregues.");
-    // Marca a ref de forma SÍNCRONA (não depende de re-render) antes de
-    // sair da tela cheia logo abaixo — exitExamFullscreen() dispara nosso
-    // próprio listener de "fullscreenchange", e sem essa checagem síncrona
-    // ele poderia disparar o travamento de 1 minuto antes do React
-    // terminar de re-renderizar com examFinalized = true.
+    toast.success(
+      "Prova finalizada! Todas as questões foram entregues. (Simulação)",
+    );
     examFinalizedRef.current = true;
     setExamFinalized(true);
-    // Se por acaso o aluno estava sob travamento no momento de finalizar,
-    // libera imediatamente — não há mais nada a proteger depois de
-    // finalizada, então não faz sentido manter a contagem regressiva.
     setIsExamLocked(false);
     setLockCountdown(0);
     exitExamFullscreen();
@@ -2024,7 +1758,6 @@ export default function ClassroomView() {
       </div>
     ) : classroom?.subject === "HTML" ? (
       <div className="flex flex-col h-full bg-background">
-        {/* Barra de abas do editor HTML */}
         <div className="flex-none flex items-center gap-1 px-3 py-2 bg-surface border-b border-border">
           <span className="text-xs font-mono text-muted px-2 py-1 bg-background rounded border border-border">
             index.html
@@ -2036,7 +1769,6 @@ export default function ClassroomView() {
           )}
         </div>
 
-        {/* Editor Monaco em modo HTML */}
         <div className="flex-1 relative">
           <Editor
             key={`html-${displayProblem?.id}`}
@@ -2109,7 +1841,6 @@ export default function ClassroomView() {
               const val = value || "";
               validateCode(val, languageId);
               if (isExam && displayProblem) {
-                // Atualiza o mapa de arquivos do exame
                 setExamFilesMap((prev) => {
                   const current =
                     prev[displayProblem.id] ?? activeQuestionFiles;
@@ -2296,7 +2027,6 @@ export default function ClassroomView() {
     </div>
   );
 
-  // --- TRATAMENTO SEMÂNTICO DE ERROS (Acessibilidade Cognitiva) ---
   const getSemanticHint = () => {
     if (!verdict || verdict === "Accepted" || verdict === "Processando...")
       return null;
@@ -2315,7 +2045,6 @@ export default function ClassroomView() {
   };
 
   const consoleContent = isHtml ? (
-    // Para HTML: painel direito é um preview ao vivo
     <div className="h-full flex flex-col bg-background">
       <div className="flex-none flex items-center justify-between px-4 py-2 border-b border-border bg-surface">
         <span className="text-xs font-semibold text-muted uppercase tracking-wider">
@@ -2345,7 +2074,6 @@ export default function ClassroomView() {
         sandbox="allow-same-origin"
         title="Preview HTML do aluno"
       />
-      {/* Feedback de validação após submissão (checklist de regras do gabarito) */}
       {verdict && verdict !== "Processando..." && (
         <div className="flex-none border-t border-border max-h-60 overflow-y-auto">
           {submissionError ? (
@@ -2416,7 +2144,6 @@ export default function ClassroomView() {
           )}
 
           <div className="mt-6 flex flex-col shrink-0">
-            {/* Dica Semântica Exclusiva para Erros */}
             {getSemanticHint() && (
               <div className="mb-5 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3 shrink-0">
                 <BookOpen
@@ -2577,7 +2304,6 @@ export default function ClassroomView() {
                           <div className="text-base font-medium truncate text-foreground group-hover:text-primary transition-colors">
                             {work.title}
                           </div>
-                          {/* NOVO BLOCO: Renderização explícita do prazo */}
                           {work.deadline && (
                             <div className="text-xs text-muted flex items-center gap-1.5 mt-2">
                               <Clock size={14} className="text-amber-500" />
@@ -2734,7 +2460,11 @@ export default function ClassroomView() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() =>
+                              toast.info(
+                                "O upload de arquivos está desabilitado na demonstração.",
+                              )
+                            }
                             className="text-muted hover:text-primary px-3"
                             disabled={classroom.isArchived}
                           >
@@ -2793,19 +2523,18 @@ export default function ClassroomView() {
                             </div>
                           </div>
                         </div>
-                        {isOwner &&
-                          !classroom.isArchived && ( // <-- Adicionado !classroom.isArchived
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteAnnouncement(a.id)}
-                            >
-                              <Trash
-                                size={18}
-                                className="text-muted hover:text-destructive"
-                              />
-                            </Button>
-                          )}
+                        {isOwner && !classroom.isArchived && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteAnnouncement(a.id)}
+                          >
+                            <Trash
+                              size={18}
+                              className="text-muted hover:text-destructive"
+                            />
+                          </Button>
+                        )}
                       </div>
                       <div className="text-base whitespace-pre-wrap text-foreground leading-relaxed">
                         {a.content}
@@ -3198,7 +2927,6 @@ export default function ClassroomView() {
                       <Settings size={18} />
                     </Button>
 
-                    {/* BOTÃO DE EXCLUIR AUMENTADO */}
                     <Button
                       variant="danger"
                       className="h-11 px-4 flex items-center gap-2 flex-none"
@@ -3350,14 +3078,11 @@ export default function ClassroomView() {
                   ))}
                 </Select>
 
-                {/* BOTÃO DE ENVIAR E ESTADO DE ENTREGA: Apenas para Alunos */}
+                {/* BOTÃO DE ENVIAR E ESTADO DE ENTREGA */}
                 {!isOwner &&
                   hasTeacher &&
                   (isExam ? (
                     <div className="flex items-center gap-3">
-                      {/* Indicador de tentativas restantes: mostrado antes do
-                          aluno gastar tudo "às cegas". Só faz sentido
-                          quando há um limite configurado. */}
                       {hasLimit && (
                         <span
                           className={cn(
@@ -3377,7 +3102,6 @@ export default function ClassroomView() {
                         </span>
                       )}
 
-                      {/* Testar: consome tentativa, não trava a questão */}
                       <Button
                         onClick={submitSolution}
                         disabled={
@@ -3393,10 +3117,6 @@ export default function ClassroomView() {
                         {loading ? "Testando..." : "Testar Código"}
                       </Button>
 
-                      {/* Entregar Questão: apenas finaliza/trava esta questão.
-                          Não depende de tentativas — mesmo com 0 tentativas
-                          restantes, o aluno precisa poder entregar o que já
-                          testou. */}
                       <Button
                         onClick={() =>
                           displayProblem &&
@@ -3424,7 +3144,6 @@ export default function ClassroomView() {
                       </Button>
                     </div>
                   ) : (
-                    /* Botão original de exercícios */
                     <Button
                       onClick={submitSolution}
                       disabled={loading || !selectedProblemId || isBlocked}
@@ -3439,7 +3158,6 @@ export default function ClassroomView() {
 
               {/* Toolbar Mobile (Hamburguer + Submit Conditional) */}
               <div className="lg:hidden flex items-center gap-2">
-                {/* Botão de Enviar (Apenas na aba Editor e para Alunos) */}
                 {mobileIdeTab === "editor" && !isOwner && hasTeacher && (
                   <Button
                     onClick={submitSolution}
@@ -3454,7 +3172,6 @@ export default function ClassroomView() {
                   </Button>
                 )}
 
-                {/* Menu Hambúrguer */}
                 <div className="relative">
                   <Button
                     variant="secondary"
@@ -3489,7 +3206,7 @@ export default function ClassroomView() {
                           {selectedProblemId && (
                             <>
                               <button
-                                disabled={classroom.isArchived} // <-- Trava
+                                disabled={classroom.isArchived}
                                 onClick={() =>
                                   !classroom.isArchived &&
                                   navigate(
@@ -3505,7 +3222,7 @@ export default function ClassroomView() {
                                 <Settings size={16} /> Editar
                               </button>
                               <button
-                                disabled={classroom.isArchived} // <-- Trava
+                                disabled={classroom.isArchived}
                                 onClick={() =>
                                   !classroom.isArchived && handleDeleteProblem()
                                 }
@@ -3647,7 +3364,6 @@ export default function ClassroomView() {
                     );
                   })}
 
-                  {/* Botão Finalizar Prova */}
                   {!isOwner && (
                     <button
                       onClick={handleFinalizeExam}
@@ -3672,7 +3388,6 @@ export default function ClassroomView() {
             !examAcknowledged &&
             !examFinalized &&
             examStatus === "RUNNING" ? (
-              /* ---------- SPLASH DA PROVA ---------- */
               <div className="flex-1 flex items-center justify-center p-8 bg-background">
                 <div className="max-w-lg w-full bg-surface border border-amber-500/30 rounded-2xl p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
                   <div className="flex items-center gap-3">
@@ -3753,7 +3468,6 @@ export default function ClassroomView() {
                 </div>
               </div>
             ) : (
-              /* ---------- IDE NORMAL (PanelGroup existente) ---------- */
               <div className="flex-1 min-h-0 relative">
                 {/* DESKTOP LAYOUT */}
                 <div className="hidden lg:block h-full w-full">
@@ -3857,7 +3571,6 @@ export default function ClassroomView() {
                   Desempenho da Turma
                 </h2>
 
-                {/* Botão de Exportar */}
                 <div className="relative w-full md:w-auto">
                   <Button
                     variant="outline"
@@ -4002,7 +3715,6 @@ export default function ClassroomView() {
                 <Filter size={16} /> Filtros:
               </div>
 
-              {/* Filtro de Aluno (Apenas Professor) */}
               {isOwner && (
                 <Select
                   className="w-full sm:w-64 h-10 text-base"
@@ -4020,7 +3732,6 @@ export default function ClassroomView() {
                 </Select>
               )}
 
-              {/* Filtro de Status (Novo) */}
               <Select
                 className="w-full sm:w-48 h-10 text-base"
                 value={selectedStatusFilter || ""}
@@ -4037,7 +3748,6 @@ export default function ClassroomView() {
               </Select>
             </div>
 
-            {/* Lista com Scroll Horizontal no Mobile */}
             <div className="flex-1 overflow-auto p-0">
               <div className="min-w-[600px] md:min-w-full">
                 <table className="w-full text-base text-left">
@@ -4071,7 +3781,6 @@ export default function ClassroomView() {
                           key={sub.id}
                           className="hover:bg-surface/50 transition-colors"
                         >
-                          {/* ... tds de status, data, tempo, memória (mantém iguais) ... */}
                           <td className="px-6 py-4">{/* status */}</td>
                           <td className="px-6 py-4 text-foreground whitespace-nowrap">
                             {new Date(sub.createdAt).toLocaleString()}
@@ -4396,7 +4105,7 @@ export default function ClassroomView() {
                           value={gradingGrade}
                           onChange={(e) => setGradingGrade(e.target.value)}
                           className="h-11 text-base disabled:opacity-50"
-                          disabled={classroom.isArchived} // <-- Trava
+                          disabled={classroom.isArchived}
                         />
                       </div>
 
@@ -4405,7 +4114,7 @@ export default function ClassroomView() {
                           Comentários
                         </label>
                         <textarea
-                          disabled={classroom.isArchived} // <-- Trava
+                          disabled={classroom.isArchived}
                           className="w-full bg-background/20 border border-border rounded-lg p-3 text-base text-foreground resize-none h-32 focus:outline-none focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           placeholder="Feedback para o aluno..."
                           value={gradingComment}
@@ -4415,7 +4124,7 @@ export default function ClassroomView() {
 
                       <Button
                         className="w-full h-11 text-base"
-                        disabled={classroom.isArchived} // <-- Trava
+                        disabled={classroom.isArchived}
                         onClick={handleSaveGrade}
                       >
                         Salvar Avaliação
