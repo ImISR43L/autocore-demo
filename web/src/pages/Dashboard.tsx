@@ -18,7 +18,6 @@ import {
   RefreshCcw,
   Trash2,
   Code,
-  Beaker,
   Globe,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,7 +45,7 @@ interface Classroom {
   id: string;
   name: string;
   code: string;
-  subject?: "PROGRAMMING" | "CHEMISTRY" | "HTML";
+  subject?: "PROGRAMMING" | "HTML";
   owner: {
     id: string;
     email: string;
@@ -70,7 +69,7 @@ export default function Dashboard() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [newClassroomSubject, setNewClassroomSubject] = useState<
-    "PROGRAMMING" | "CHEMISTRY" | "HTML"
+    "PROGRAMMING" | "HTML"
   >("PROGRAMMING");
   const [joinCode, setJoinCode] = useState("");
 
@@ -79,14 +78,14 @@ export default function Dashboard() {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState("Visitante");
 
-  // ALTERAÇÃO: Lê o usuário do sessionStorage ao invés do Supabase
+  // Lê os dados do usuário a partir da sessão simulada
   useEffect(() => {
     const getUser = async () => {
       const savedUser = sessionStorage.getItem("demo_user");
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
-        // ID fixo para a demonstração agir como dono das turmas
-        setMyUserId("demo-user-id");
+        // Garantimos que o ID é lido da sessão para que as turmas reconheçam o professor corretamente
+        setMyUserId(parsedUser.id || "demo-user-id");
         setUserName(parsedUser.name.split(" ")[0]);
       } else {
         navigate("/");
@@ -99,7 +98,7 @@ export default function Dashboard() {
     fetchClassrooms();
   }, [viewMode]);
 
-  // ALTERAÇÃO: Chama a API, mas possui um Fallback robusto para injetar os dados fantasmas
+  // Agora a requisição é feita normalmente para a API, pois será interceptada pelo mock (setup.ts)
   const fetchClassrooms = async () => {
     try {
       setLoading(true);
@@ -108,48 +107,7 @@ export default function Dashboard() {
       const res = await api.get(endpoint);
       setClassrooms(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
-      // Fallback para a Demonstração
-      const demoData: Classroom[] =
-        viewMode === "active"
-          ? [
-              {
-                id: "1", // Turma 1 - VOCÊ É O PROFESSOR
-                name: "Lógica de Programação",
-                code: "LOG2024",
-                subject: "PROGRAMMING",
-                owner: { id: "demo-user-id", email: "professor@demo.com" }, // ID igual ao seu
-                problems: [
-                  {
-                    id: "p1",
-                    title: "Calculadora de Bhaskara",
-                    deadline: new Date(Date.now() + 86400000).toISOString(),
-                  },
-                ],
-                _count: { students: 35, problems: 1 },
-              },
-              {
-                id: "2", // Turma 2 - VOCÊ É O ALUNO
-                name: "Química Orgânica",
-                code: "QUI101",
-                subject: "CHEMISTRY",
-                owner: { id: "outro-professor-id", email: "roberto@demo.com" }, // ID diferente do seu
-                problems: [],
-                _count: { students: 42, problems: 0 },
-              },
-            ]
-          : [
-              {
-                id: "3",
-                name: "Desenvolvimento Web (2023)",
-                code: "WEB2023",
-                subject: "HTML",
-                owner: { id: "demo-user-id", email: "professor@demo.com" },
-                problems: [],
-                isArchived: true,
-                _count: { students: 28, problems: 5 },
-              },
-            ];
-      setClassrooms(demoData);
+      toast.error("Erro ao carregar as turmas.");
     } finally {
       setLoading(false);
     }
@@ -194,7 +152,7 @@ export default function Dashboard() {
     navigate(`/class/${classId}`, { state: { problemId: problemId } });
   };
 
-  // ALTERAÇÃO: Atualiza o estado local para simular a criação instantânea na demo
+  // Simula a requisição POST de criação para persistir na memória
   const handleCreateClassroom = async () => {
     if (!newClassName.trim()) {
       toast.error("O nome da turma é obrigatório.");
@@ -202,39 +160,34 @@ export default function Dashboard() {
     }
 
     try {
-      const newClass: Classroom = {
-        id: Math.random().toString(36).substring(7),
+      await api.post("/classrooms", {
         name: newClassName,
-        code: Math.random().toString(36).substring(2, 8).toUpperCase(),
         subject: newClassroomSubject,
-        owner: { id: myUserId!, email: "demo@autocore.com" },
-        problems: [],
-        _count: { students: 0, problems: 0 },
-      };
+      });
 
-      setClassrooms([newClass, ...classrooms]);
       setShowCreateModal(false);
       setNewClassName("");
       setNewClassroomSubject("PROGRAMMING");
-      toast.success("Turma criada na demonstração!");
+      toast.success("Turma criada com sucesso!");
+      fetchClassrooms(); // Recarrega do banco de dados em memória
     } catch (error: any) {
       toast.error("Erro ao criar turma");
     }
   };
 
-  // ALTERAÇÃO: Simula o join em uma turma
   const handleJoinClassroom = async () => {
     if (!joinCode.trim()) return toast.warning("Código inválido");
     try {
-      toast.success("Você entrou na turma (Modo Demonstração)!");
+      await api.post(`/classrooms/join/${joinCode.toUpperCase()}`);
+      toast.success("Você entrou na turma!");
       setShowJoinModal(false);
       setJoinCode("");
+      fetchClassrooms();
     } catch (error: any) {
-      toast.error("Erro ao entrar");
+      toast.error("Erro ao entrar. Verifique se o código é válido.");
     }
   };
 
-  // ALTERAÇÃO: Limpa o sessionStorage ao sair
   const handleLogout = async () => {
     sessionStorage.removeItem("demo_user");
     navigate("/");
@@ -246,12 +199,13 @@ export default function Dashboard() {
       c.code.toLowerCase().includes(search.toLowerCase()),
   );
 
-  // ALTERAÇÕES: Simulam as ações removendo o item do estado visual
+  // Funcionalidades completas de arquivamento (Atualiza API e Refetch)
   const handleArchive = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      setClassrooms(classrooms.filter((c) => c.id !== id));
+      await api.patch(`/classrooms/${id}/archive`);
       toast.success("Turma arquivada com sucesso!");
+      fetchClassrooms();
     } catch (error) {
       toast.error("Erro ao arquivar turma");
     }
@@ -260,8 +214,9 @@ export default function Dashboard() {
   const handleRestore = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      setClassrooms(classrooms.filter((c) => c.id !== id));
+      await api.patch(`/classrooms/${id}/unarchive`);
       toast.success("Turma restaurada!");
+      fetchClassrooms();
     } catch (error) {
       toast.error("Erro ao restaurar turma");
     }
@@ -276,8 +231,9 @@ export default function Dashboard() {
     )
       return;
     try {
-      setClassrooms(classrooms.filter((c) => c.id !== id));
+      await api.delete(`/classrooms/${id}`);
       toast.success("Turma excluída permanentemente.");
+      fetchClassrooms();
     } catch (error) {
       toast.error("Erro ao excluir turma.");
     }
@@ -310,7 +266,7 @@ export default function Dashboard() {
 
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-10">
-        {/* CABEÇALHO (Responsivo: Stack no mobile, Row no desktop) */}
+        {/* CABEÇALHO */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8 sm:mb-10">
           <div className="w-full md:w-auto">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2 sm:mb-3">
@@ -341,34 +297,14 @@ export default function Dashboard() {
 
         {/* BARRA DE FERRAMENTAS */}
         <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
-          <div className="relative w-full max-w-full sm:max-w-md">
-            <Search
-              size={20}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
-            />
-            <Input
-              type="text"
-              placeholder="Buscar turmas..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 bg-surface border-border focus:border-primary/50 h-11 sm:h-12 text-sm sm:text-base w-full"
-            />
-          </div>
-          <div className="text-sm sm:text-base text-muted w-full sm:w-auto text-left">
-            Mostrando{" "}
-            <strong className="text-foreground">
-              {filteredClassrooms.length}
-            </strong>{" "}
-            turmas
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 border-b border-border pb-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4 border-b border-border pb-4">
             <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
               <Button
                 variant={viewMode === "active" ? "secondary" : "ghost"}
                 onClick={() => {
                   if (viewMode !== "active") {
                     setLoading(true);
-                    setClassrooms([]); // Destrói o estado anterior instantaneamente
+                    setClassrooms([]);
                     setViewMode("active");
                   }
                 }}
@@ -381,7 +317,7 @@ export default function Dashboard() {
                 onClick={() => {
                   if (viewMode !== "archived") {
                     setLoading(true);
-                    setClassrooms([]); // Destrói o estado anterior instantaneamente
+                    setClassrooms([]);
                     setViewMode("archived");
                   }
                 }}
@@ -407,7 +343,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* GRID DE TURMAS (Responsivo: 1 col mobile -> 2 sm -> 3 lg) */}
+        {/* GRID DE TURMAS */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary mb-4"></div>
@@ -435,9 +371,7 @@ export default function Dashboard() {
                     )}
                   >
                     <div className="p-3 bg-primary/10 text-primary rounded-lg">
-                      {c.subject === "CHEMISTRY" ? (
-                        <Beaker size={24} />
-                      ) : c.subject === "HTML" ? (
+                      {c.subject === "HTML" ? (
                         <Globe size={24} />
                       ) : (
                         <Code size={24} />
@@ -446,9 +380,7 @@ export default function Dashboard() {
                     {isOwner ? (
                       <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium text-primary-dark dark:text-primary border border-primary/20 dark:border-primary/10">
                         <Crown size={14} />{" "}
-                        <span className="hidden xs:inline">
-                          {c.owner?.id ? `Professor` : "Professor Excluído"}
-                        </span>
+                        <span className="hidden xs:inline">Professor</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 rounded-md bg-background/50 dark:bg-muted/10 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium text-foreground border border-border/80 dark:border-border/50">
@@ -459,7 +391,7 @@ export default function Dashboard() {
                     <span
                       className="font-mono text-xs sm:text-sm text-muted/80 tracking-wider flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors group z-10"
                       onClick={(e) => {
-                        e.stopPropagation(); // Impede que o clique acesse o redirecionamento do card
+                        e.stopPropagation();
                         navigator.clipboard.writeText(c.code);
                         toast.success("Código copiado!");
                       }}
@@ -585,11 +517,11 @@ export default function Dashboard() {
             <p className="text-muted text-sm sm:text-base max-w-md mb-6 sm:mb-8">
               {search
                 ? `Não encontramos nenhuma turma com o nome "${search}".`
-                : "Você ainda não participa de nenhuma turma."}
+                : "Você ainda não tem ou participa de nenhuma turma desta categoria."}
             </p>
             {!search && (
               <Button
-                onClick={() => setShowJoinModal(true)}
+                onClick={() => setShowCreateModal(true)}
                 size="md"
                 className="h-11 sm:h-12 px-6 sm:px-8 text-sm sm:text-base"
               >
@@ -601,7 +533,6 @@ export default function Dashboard() {
       </main>
 
       {/* MODAL: CRIAR TURMA */}
-      {/* Modal Criar Turma */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-surface border border-border rounded-2xl sm:rounded-3xl p-6 sm:p-8 w-full max-w-md sm:max-w-lg shadow-2xl relative">
@@ -625,7 +556,7 @@ export default function Dashboard() {
                 <Input
                   value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)}
-                  placeholder="Ex: Algoritmos ou Química Orgânica"
+                  placeholder="Ex: Algoritmos ou Desenvolvimento Web"
                   autoFocus
                 />
               </div>
@@ -634,7 +565,8 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Disciplina do Ambiente
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                {/* Alterado para 2 colunas e opção de Química removida */}
+                <div className="grid grid-cols-2 gap-3">
                   {/* Botão de Programação */}
                   <button
                     onClick={() => setNewClassroomSubject("PROGRAMMING")}
@@ -646,19 +578,6 @@ export default function Dashboard() {
                   >
                     <Code size={28} className="mb-2" />
                     <span className="font-semibold text-sm">Programação</span>
-                  </button>
-
-                  {/* Botão de Química */}
-                  <button
-                    onClick={() => setNewClassroomSubject("CHEMISTRY")}
-                    className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
-                      newClassroomSubject === "CHEMISTRY"
-                        ? "border-primary bg-primary/10 text-primary shadow-sm"
-                        : "border-border bg-surface text-muted hover:border-muted hover:text-foreground"
-                    }`}
-                  >
-                    <Beaker size={28} className="mb-2" />
-                    <span className="font-semibold text-sm">Química</span>
                   </button>
 
                   {/* Botão de HTML */}
@@ -677,7 +596,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* 👇 BOTÕES DE AÇÃO RESTAURADOS AQUI 👇 */}
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4">
               <Button
                 variant="ghost"

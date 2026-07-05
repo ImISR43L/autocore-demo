@@ -53,9 +53,10 @@ import {
   Users,
   Archive,
   EyeOff,
-  Beaker,
   ClipboardPaste,
   AlertTriangle,
+  Globe,
+  Code,
 } from "lucide-react";
 import {
   Panel,
@@ -73,9 +74,6 @@ import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { Card } from "../components/ui/Card";
 import { cn } from "../lib/utils";
-
-import { MoleculeWorkspace } from "../features/molecule-env";
-import { useMoleculeStore } from "../features/molecule-env/store/useMoleculeStore";
 
 import "highlight.js/styles/atom-one-dark.css";
 import "../App.css";
@@ -132,16 +130,16 @@ interface Problem {
   allowedLanguages?: string[];
   validationConfig?: {
     expectedMode?: string;
-    expectedSmiles?: string;
+    referenceHtml?: string;
     rawState?: any;
   };
 }
 
 interface Classroom {
-  id: number;
+  id: string;
   name: string;
   code: string;
-  subject?: "PROGRAMMING" | "CHEMISTRY" | "HTML";
+  subject?: "PROGRAMMING" | "HTML";
   owner: { id: string; email: string; name?: string } | null;
   students: { id: string; email: string; name?: string }[];
   problems: Problem[];
@@ -277,7 +275,6 @@ export default function ClassroomView() {
   const [showSubmissions, setShowSubmissions] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
 
-  // Filtros de Submissão
   const [selectedStudentFilter, setSelectedStudentFilter] = useState<
     string | null
   >(null);
@@ -312,6 +309,7 @@ export default function ClassroomView() {
   const [posting, setPosting] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [stats, setStats] = useState<StatData[]>([]);
   const [problemStats, setProblemStats] = useState<ProblemStat[]>([]);
 
@@ -323,7 +321,6 @@ export default function ClassroomView() {
 
   const [showReportMenu, setShowReportMenu] = useState(false);
 
-  // --- ESTADOS DE ACESSIBILIDADE ---
   const [highContrast, setHighContrast] = useState(
     () => localStorage.getItem("a11y_highContrast") === "true",
   );
@@ -341,23 +338,15 @@ export default function ClassroomView() {
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
-  // --- CONTROLE DE TELA CHEIA / BLOQUEIO ANTI-COLA (PROVAS) ---
-  const EXAM_LOCK_DURATION_SECONDS = 60; // 1 minuto de bloqueio
+  const EXAM_LOCK_DURATION_SECONDS = 60;
   const [isExamLocked, setIsExamLocked] = useState(false);
   const [lockCountdown, setLockCountdown] = useState(0);
 
-  // Sub-aba dentro de "Atividades": exercícios vs provas
   const [problemTypeTab, setProblemTypeTab] = useState<"exercises" | "exams">(
     "exercises",
   );
 
-  // Splash da prova: aluno confirmou que leu as regras?
-  // Resetar sempre que trocar de problema
   const [examAcknowledged, setExamAcknowledged] = useState(false);
-
-  // O aluno já finalizou a prova (entregou todas as questões e clicou em
-  // "Finalizar")? Usado para desligar o travamento de Alt+Tab/tela cheia
-  // depois que não há mais nada a proteger.
   const [examFinalized, setExamFinalized] = useState(false);
   const examFinalizedRef = useRef(false);
 
@@ -369,20 +358,14 @@ export default function ClassroomView() {
     setExamAcknowledged(false);
   }, [selectedProblemId]);
 
-  // Dicionário de arquivos por questão (chave = child problem ID)
   const [examFilesMap, setExamFilesMap] = useState<Record<string, FileEntry[]>>(
     {},
   );
-
-  // Dicionário de HTML por questão (chave = child problem ID)
   const [examHtmlMap, setExamHtmlMap] = useState<Record<string, string>>({});
-
-  // Questões já entregues (travadas) — Set de child problem IDs
   const [deliveredQuestions, setDeliveredQuestions] = useState<Set<string>>(
     new Set(),
   );
 
-  // Resetar ao trocar de prova
   useEffect(() => {
     setDeliveredQuestions(new Set());
     setExamFilesMap({});
@@ -414,16 +397,15 @@ export default function ClassroomView() {
   useEffect(() => {
     if (!monacoRef.current) return;
 
-    // Define temas customizados baseados no modo de daltonismo
     const monaco = monacoRef.current;
 
     monaco.editor.defineTheme("deuteranopia-dark", {
       base: "vs-dark",
       inherit: true,
       rules: [
-        { token: "keyword", foreground: "60a5fa" }, // Azul claro
-        { token: "string", foreground: "fb923c" }, // Laranja
-        { token: "number", foreground: "e879f9" }, // Roxo/Rosa
+        { token: "keyword", foreground: "60a5fa" },
+        { token: "string", foreground: "fb923c" },
+        { token: "number", foreground: "e879f9" },
         { token: "comment", foreground: "9ca3af" },
       ],
       colors: {
@@ -435,8 +417,8 @@ export default function ClassroomView() {
       base: "vs-dark",
       inherit: true,
       rules: [
-        { token: "keyword", foreground: "22d3ee" }, // Ciano
-        { token: "string", foreground: "fb7185" }, // Rosa
+        { token: "keyword", foreground: "22d3ee" },
+        { token: "string", foreground: "fb7185" },
         { token: "number", foreground: "ffffff" },
       ],
       colors: {
@@ -466,26 +448,25 @@ export default function ClassroomView() {
 
   const [myUserId, setMyUserId] = useState<string | null>(null);
 
-  // Salva a aba ativa no cache sempre que ela mudar
   useEffect(() => {
     if (id) {
       localStorage.setItem(`activeTab_${id}`, activeTab);
     }
   }, [activeTab, id]);
 
-  // Salva o último exercício selecionado no cache sempre que mudar
   useEffect(() => {
     if (id && selectedProblemId) {
       localStorage.setItem(`lastProblemId_${id}`, selectedProblemId);
     }
   }, [selectedProblemId, id]);
 
-  // ALTERAÇÃO DEMO: Buscar usuário da sessão
+  // Carrega o usuário dinâmico logado via sessionStorage
   useEffect(() => {
     const fetchUser = async () => {
       const savedUser = sessionStorage.getItem("demo_user");
       if (savedUser) {
-        setMyUserId("demo-user-id"); // Hardcoded ID para manter a lógica original funcionando
+        const parsedUser = JSON.parse(savedUser);
+        setMyUserId(parsedUser.id || "demo-user-id");
       } else {
         navigate("/");
       }
@@ -721,91 +702,69 @@ export default function ClassroomView() {
     }
   }, [classroom, location.state, id, selectedProblemId]);
 
-  // ALTERAÇÃO DEMO: FetchClassroomData simulado/resiliente
   const fetchClassroomData = useCallback(async () => {
     try {
       const res = await api.get(`/classrooms/${id}`);
-      setClassroom(res.data);
+      const data = res.data;
+
+      // --- PATCH DEMONSTRAÇÃO ---
+      // Substitui dinamicamente as referências de Aluno/Professor pelas da sessão ativa
+      const savedUser = sessionStorage.getItem("demo_user");
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        const uid = parsedUser.id || "demo-user-id";
+
+        if (data.owner?.id === uid) {
+          data.owner.name = parsedUser.name;
+          data.owner.email = parsedUser.email;
+        }
+        if (data.students) {
+          data.students.forEach((student: any) => {
+            if (student.id === uid) {
+              student.name = parsedUser.name;
+              student.email = parsedUser.email;
+            }
+          });
+        }
+        if (data.announcements) {
+          data.announcements.forEach((ann: any) => {
+            if (ann.author?.id === uid) {
+              ann.author.name = parsedUser.name;
+              ann.author.email = parsedUser.email;
+            }
+          });
+        }
+      }
+      // ---------------------------
+
+      setClassroom(data);
     } catch {
-      // Verifica se a sala acessada é a sala em que você é aluno (Turma 2)
-      const isStudentView = id === "2";
-
-      const demoAnns = JSON.parse(
-        sessionStorage.getItem(`demo_announcements_${id}`) || "[]",
-      );
-
-      const demoClassroom: Classroom = {
-        id: Number(id) || 1,
-        // Altera o nome e a matéria dependendo se você é aluno ou professor
-        name: isStudentView
-          ? "Química Orgânica (Visão de Aluno)"
-          : "Lógica de Programação (Visão Professor)",
-        code: isStudentView ? "QUI101" : "DEMO01",
-        subject: isStudentView ? "CHEMISTRY" : "PROGRAMMING",
-
-        // A MÁGICA ACONTECE AQUI:
-        owner: {
-          id: isStudentView ? "outro-professor-id" : "demo-user-id",
-          email: isStudentView ? "roberto@demo.com" : "professor@demo.com",
-          name: isStudentView ? "Prof. Roberto" : "Professor Demo",
-        },
-
-        students: [
-          // Se você for aluno, o seu usuário é injetado na lista de estudantes
-          ...(isStudentView
-            ? [
-                {
-                  id: "demo-user-id",
-                  email: "eu@demo.com",
-                  name: "Meu Usuário",
-                },
-              ]
-            : []),
-          { id: "s1", email: "aluno1@escola.com", name: "Ana Silva" },
-          { id: "s2", email: "aluno2@escola.com", name: "Carlos Souza" },
-        ],
-        problems: [
-          {
-            id: "prob-1",
-            title: isStudentView
-              ? "Nomenclatura IUPAC"
-              : "Calculadora de Bhaskara",
-            slug: "demo-exercise",
-            type: "EXERCISE",
-            description: isStudentView
-              ? "Monte a estrutura da molécula com base nas regras da IUPAC."
-              : "Escreva um programa que calcule as raízes de uma equação do segundo grau.\n\n**Fórmula:** $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$",
-            testCases: [
-              { input: "1 -5 6", expectedOutput: "3 2", isHidden: false },
-            ],
-            allowedLanguages: ["python", "javascript", "cpp", "java"],
-          },
-        ],
-        announcements:
-          demoAnns.length > 0
-            ? demoAnns
-            : [
-                {
-                  id: "ann-welcome",
-                  content: "Bem-vindos à turma de demonstração do AutoCore!",
-                  createdAt: new Date().toISOString(),
-                  author: {
-                    id: isStudentView ? "outro-professor-id" : "demo-user-id",
-                    email: "professor@demo.com",
-                    name: isStudentView ? "Prof. Roberto" : "Sistema AutoCore",
-                  },
-                },
-              ],
-      };
-      setClassroom(demoClassroom);
+      toast.error("Erro ao carregar a turma. Verifique se ela existe.");
+      navigate("/dashboard");
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const fetchSubmissions = useCallback(async (probId: string) => {
     if (!probId) return;
     try {
       const res = await api.get(`/submissions/problem/${probId}`);
-      setSubmissions(res.data);
+      const data = res.data;
+
+      // --- PATCH DEMONSTRAÇÃO ---
+      const savedUser = sessionStorage.getItem("demo_user");
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        const uid = parsedUser.id || "demo-user-id";
+        data.forEach((sub: any) => {
+          if (sub.user?.id === uid) {
+            sub.user.name = parsedUser.name;
+            sub.user.email = parsedUser.email;
+          }
+        });
+      }
+      // ---------------------------
+
+      setSubmissions(data);
     } catch (error) {
       setSubmissions([]);
     }
@@ -847,7 +806,6 @@ export default function ClassroomView() {
 
   useEffect(() => {
     fetchClassroomData();
-    // Socket removido na versão demo
   }, [fetchClassroomData]);
 
   useEffect(() => {
@@ -858,7 +816,6 @@ export default function ClassroomView() {
         setCurrentProblem(res.data);
         setActiveChildIndex(0);
       } catch (e) {
-        // Fallback para os detalhes caso API falhe (já mockado no classroom view principal)
         if (classroom) {
           const prob = classroom.problems.find(
             (p) => p.id === selectedProblemId,
@@ -1133,17 +1090,10 @@ export default function ClassroomView() {
       return;
     setPosting(true);
 
-    setTimeout(() => {
-      const demoUser = JSON.parse(sessionStorage.getItem("demo_user") || "{}");
-      const newPost: Announcement = {
-        id: `ann-${Date.now()}`,
+    try {
+      await api.post("/announcements", {
+        classroomId: id,
         content: newAnnouncement,
-        createdAt: new Date().toISOString(),
-        author: {
-          id: "demo-user-id",
-          email: demoUser.email || "demo@demo.com",
-          name: demoUser.name || "Professor",
-        },
         links: manualLinks.map((url) => ({
           url,
           title: "Link Adicionado",
@@ -1157,25 +1107,19 @@ export default function ClassroomView() {
           size: f.size,
           mimeType: f.type,
         })),
-      };
-
-      const existing = JSON.parse(
-        sessionStorage.getItem(`demo_announcements_${id}`) || "[]",
-      );
-      sessionStorage.setItem(
-        `demo_announcements_${id}`,
-        JSON.stringify([newPost, ...existing]),
-      );
-
-      toast.success("Aviso publicado na demonstração!");
+      });
+      toast.success("Aviso publicado!");
       setNewAnnouncement("");
       setSelectedFiles([]);
       setManualLinks([]);
       setShowLinkInput(false);
       setCurrentLink("");
       fetchClassroomData();
+    } catch (err) {
+      toast.error("Erro ao postar na demonstração.");
+    } finally {
       setPosting(false);
-    }, 600);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1190,18 +1134,21 @@ export default function ClassroomView() {
 
   const handleDeleteAnnouncement = async (id: string) => {
     if (!confirm("Apagar?")) return;
+    try {
+      const existing = JSON.parse(
+        sessionStorage.getItem(`demo_announcements_${classroom?.id}`) || "[]",
+      );
+      const filtered = existing.filter((a: any) => a.id !== id);
+      sessionStorage.setItem(
+        `demo_announcements_${classroom?.id}`,
+        JSON.stringify(filtered),
+      );
 
-    const existing = JSON.parse(
-      sessionStorage.getItem(`demo_announcements_${classroom?.id}`) || "[]",
-    );
-    const filtered = existing.filter((a: any) => a.id !== id);
-    sessionStorage.setItem(
-      `demo_announcements_${classroom?.id}`,
-      JSON.stringify(filtered),
-    );
-
-    toast.success("Aviso removido!");
-    fetchClassroomData();
+      toast.success("Aviso removido!");
+      fetchClassroomData();
+    } catch {
+      toast.error("Erro ao remover aviso.");
+    }
   };
 
   const handleAddLink = () => {
@@ -1226,7 +1173,6 @@ export default function ClassroomView() {
     toast.info("A exclusão de problemas está desabilitada na demonstração.");
   };
 
-  // ALTERAÇÃO DEMO: submitSolution apenas simula e bloqueia
   const submitSolution = async (e?: React.SyntheticEvent) => {
     if (e) e.preventDefault();
 
@@ -1622,6 +1568,7 @@ export default function ClassroomView() {
     examFinalized,
     triggerExamLock,
   ]);
+
   const isHtml = classroom?.subject === "HTML";
   const hasLimit =
     currentProblem?.maxAttempts != null && currentProblem.maxAttempts > 0;
@@ -1672,13 +1619,6 @@ export default function ClassroomView() {
   if (typeof safeValidationConfig === "string") {
     try {
       safeValidationConfig = JSON.parse(safeValidationConfig);
-    } catch (e) {}
-  }
-
-  let parsedRawState = safeValidationConfig?.rawState;
-  if (typeof parsedRawState === "string") {
-    try {
-      parsedRawState = JSON.parse(parsedRawState);
     } catch (e) {}
   }
 
@@ -1747,16 +1687,7 @@ export default function ClassroomView() {
   };
 
   const editorContent =
-    classroom?.subject === "CHEMISTRY" ? (
-      <div className="w-full h-full relative overflow-hidden bg-background">
-        <MoleculeWorkspace
-          key={`student-ide-${displayProblem?.id || "empty"}`}
-          initialSmiles={isOwner ? safeValidationConfig?.expectedSmiles : ""}
-          initialMode={safeValidationConfig?.expectedMode}
-          initialRawState={isOwner ? parsedRawState : undefined}
-        />
-      </div>
-    ) : classroom?.subject === "HTML" ? (
+    classroom?.subject === "HTML" ? (
       <div className="flex flex-col h-full bg-background">
         <div className="flex-none flex items-center gap-1 px-3 py-2 bg-surface border-b border-border">
           <span className="text-xs font-mono text-muted px-2 py-1 bg-background rounded border border-border">
@@ -2738,7 +2669,7 @@ export default function ClassroomView() {
                           classroom?.owner?.email ||
                           "Professor (Conta Excluída)"}
                       </span>
-                      {classroom?.owner?.name && (
+                      {classroom?.owner?.email && (
                         <span className="text-xs text-muted truncate">
                           {classroom?.owner?.email}
                         </span>
@@ -2754,7 +2685,7 @@ export default function ClassroomView() {
                   <h3 className="text-primary-dark dark:text-primary font-semibold text-xl flex items-center gap-3">
                     Estudantes
                     <span className="text-sm bg-primary/10 text-primary-dark dark:text-primary border border-primary/20 dark:border-primary/10 px-3 py-1 rounded-full">
-                      {classroom.students.length}
+                      {classroom.students?.length || 0}
                     </span>
                   </h3>
                 </div>
@@ -2948,11 +2879,9 @@ export default function ClassroomView() {
                     onClick={() => navigate(`/class/${id}/create-problem`)}
                   >
                     <Plus size={20} className="mr-2" />
-                    {classroom?.subject === "CHEMISTRY"
-                      ? "Novo Exercício de Química"
-                      : classroom?.subject === "HTML"
-                        ? "Novo Exercício de HTML"
-                        : "Novo Exercício de Programação"}
+                    {classroom?.subject === "HTML"
+                      ? "Novo Exercício de HTML"
+                      : "Novo Exercício de Programação"}
                   </Button>
                 )}
 
@@ -3199,8 +3128,8 @@ export default function ClassroomView() {
                             )}
                           >
                             <Plus size={16} />{" "}
-                            {classroom?.subject === "CHEMISTRY"
-                              ? "Novo Exerc. de Química"
+                            {classroom?.subject === "HTML"
+                              ? "Novo Exerc. de HTML"
                               : "Novo Problema"}
                           </button>
                           {selectedProblemId && (
@@ -3971,8 +3900,8 @@ export default function ClassroomView() {
               <div className="flex-1 lg:border-r border-border flex flex-col min-h-[300px]">
                 <div className="bg-surface p-3 border-b border-border text-sm text-muted flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {classroom?.subject === "CHEMISTRY" ? (
-                      <Beaker size={18} />
+                    {classroom?.subject === "HTML" ? (
+                      <Globe size={18} />
                     ) : (
                       <FileCode size={18} />
                     )}
@@ -4001,14 +3930,13 @@ export default function ClassroomView() {
                 </div>
 
                 <div className="flex-1 relative bg-background">
-                  {classroom?.subject === "CHEMISTRY" ? (
-                    <MoleculeWorkspace
-                      key={
-                        activeSubmission?.id ||
-                        selectedSubmission?.id ||
-                        "viewer"
-                      }
-                      initialSmiles={
+                  {classroom?.subject === "HTML" ? (
+                    <Editor
+                      height="100%"
+                      width="100%"
+                      language="html"
+                      theme={monacoTheme}
+                      value={
                         (isOwner &&
                           activeSubmission?.files[inspectFileIndex]?.content) ||
                         (!isOwner &&
@@ -4016,15 +3944,20 @@ export default function ClassroomView() {
                             ?.content) ||
                         ""
                       }
-                      initialMode={
-                        displayProblem?.validationConfig?.expectedMode as any
-                      }
+                      options={{
+                        readOnly: true,
+                        minimap: { enabled: false },
+                        fontSize: 16,
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        accessibilitySupport: screenReaderMode ? "on" : "auto",
+                      }}
                     />
                   ) : (
                     <Editor
                       height="100%"
                       width="100%"
-                      language="python"
+                      language={LANGUAGE_MAP[languageId] || "python"}
                       theme={monacoTheme}
                       value={
                         (isOwner &&
