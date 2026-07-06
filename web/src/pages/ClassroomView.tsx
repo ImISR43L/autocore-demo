@@ -707,7 +707,6 @@ export default function ClassroomView() {
       const data = res.data;
 
       // --- PATCH DEMONSTRAÇÃO ---
-      // Substitui dinamicamente as referências de Aluno/Professor pelas da sessão ativa
       const savedUser = sessionStorage.getItem("demo_user");
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
@@ -734,7 +733,6 @@ export default function ClassroomView() {
           });
         }
       }
-      // ---------------------------
 
       setClassroom(data);
     } catch {
@@ -761,7 +759,6 @@ export default function ClassroomView() {
           }
         });
       }
-      // ---------------------------
 
       setSubmissions(data);
     } catch (error) {
@@ -2209,7 +2206,7 @@ export default function ClassroomView() {
         <div className="bg-orange-500/10 border-b border-orange-500/20 px-4 py-2.5 flex items-center justify-center gap-2 text-sm font-medium text-orange-500 shadow-inner shrink-0 z-10">
           <Archive size={18} />
           Esta turma está arquivada. O modo somente leitura está ativado e
-          alterações estão bloqueadas.
+          alterações estão blocks.
         </div>
       )}
       <main className="flex-1 overflow-hidden relative">
@@ -2739,32 +2736,34 @@ export default function ClassroomView() {
         {activeTab === "classwork" && (
           <div className="flex flex-col h-full">
             {/* Toolbar da IDE */}
-            <div className="flex-none flex items-center justify-between p-4 border-b border-border bg-surface gap-4">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+            <div className="flex-none flex flex-col md:flex-row md:items-center justify-between p-4 border-b border-border bg-surface gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-1 w-full min-w-0">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   {/* Pills para alternar tipo */}
-                  <div className="flex bg-background rounded-lg border border-border p-0.5 gap-0.5">
+                  <div className="flex bg-background rounded-lg border border-border p-0.5 gap-0.5 justify-center sm:justify-start">
                     <button
                       onClick={() => setProblemTypeTab("exercises")}
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all",
+                        "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all flex-1 sm:flex-none",
                         problemTypeTab === "exercises"
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted hover:text-foreground",
                       )}
                     >
-                      <BookOpen size={14} /> Exercícios
+                      <BookOpen size={14} />{" "}
+                      <span className="whitespace-nowrap">Exercícios</span>
                     </button>
                     <button
                       onClick={() => setProblemTypeTab("exams")}
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all",
+                        "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all flex-1 sm:flex-none",
                         problemTypeTab === "exams"
                           ? "bg-amber-500 text-white shadow-sm"
                           : "text-muted hover:text-foreground",
                       )}
                     >
-                      <GraduationCap size={14} /> Provas
+                      <GraduationCap size={14} />{" "}
+                      <span className="whitespace-nowrap">Provas</span>
                       {examOptions.length > 0 && (
                         <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">
                           {examOptions.length}
@@ -2777,7 +2776,7 @@ export default function ClassroomView() {
                   <Select
                     value={selectedProblemId || ""}
                     onChange={(e) => setSelectedProblemId(e.target.value)}
-                    className="w-60 h-11 text-base"
+                    className="w-full sm:w-60 h-11 text-base"
                   >
                     <option value="">
                       {problemTypeTab === "exercises"
@@ -2799,7 +2798,7 @@ export default function ClassroomView() {
                 {isExam && (
                   <div
                     className={cn(
-                      "px-4 py-2 rounded text-sm font-bold flex items-center gap-2 h-11 whitespace-nowrap",
+                      "px-4 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 h-11 whitespace-nowrap w-full sm:w-auto",
                       examStatus === "RUNNING"
                         ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                         : examStatus === "FINISHED"
@@ -2808,7 +2807,7 @@ export default function ClassroomView() {
                     )}
                   >
                     <Clock size={18} />
-                    <span className="hidden sm:inline">
+                    <span>
                       {examStatus === "WAITING"
                         ? "Aguardando"
                         : examStatus === "FINISHED"
@@ -3085,18 +3084,16 @@ export default function ClassroomView() {
               </div>
 
               {/* Toolbar Mobile (Hamburguer + Submit Conditional) */}
-              <div className="lg:hidden flex items-center gap-2">
+              <div className="lg:hidden flex items-center justify-end gap-2 w-full md:w-auto border-t md:border-t-0 pt-2 md:pt-0 border-border">
                 {mobileIdeTab === "editor" && !isOwner && hasTeacher && (
                   <Button
                     onClick={submitSolution}
                     disabled={loading || !selectedProblemId || isBlocked}
                     isLoading={loading}
-                    size="icon"
-                    className="h-11 w-11 bg-primary text-foreground"
+                    variant="primary"
+                    className="h-11 px-4 text-sm font-semibold flex-1 sm:flex-none justify-center"
                   >
-                    <div className="flex items-center justify-center">
-                      <Plus className="rotate-45" size={24} />
-                    </div>
+                    {loading ? "Testando..." : "Testar Código"}
                   </Button>
                 )}
 
